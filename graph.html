@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpireWise — Synergy map</title>
+<meta name="description" content="Which Slay the Spire 2 cards win more together, and which lose more together, from 100k+ Ascension 10 runs.">
+<link rel="stylesheet" href="style.css">
+<style>
+  main.graph{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;padding:16px 24px;align-items:start}
+  #stage{position:relative;height:calc(100vh - 150px);min-height:520px;padding:0;overflow:hidden}
+  #stage svg{width:100%;height:100%;display:block;cursor:grab}
+  .edge{fill:none;stroke-linecap:round}
+  .node circle.ring{fill:var(--panel2);stroke-width:3}
+  .node text{fill:var(--text);font-size:11px;text-anchor:middle;pointer-events:none;paint-order:stroke;stroke:#000;stroke-width:3px}
+  .node{cursor:pointer}
+  .dim{opacity:.12}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:8px}
+  .sw{display:inline-block;width:22px;height:4px;border-radius:2px;vertical-align:middle;margin-right:5px}
+  .side h3{font:600 14px Georgia,serif;margin:12px 0 4px;color:var(--gold)}
+  .side table{border-collapse:collapse;width:100%;font-size:13.5px}
+  .side td{padding:3px 4px;border-bottom:1px solid var(--line)}
+  .side td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .side img{width:120px;border-radius:6px;float:right;margin-left:10px}
+  .ctl{display:grid;gap:10px}
+  .ctl label{display:flex;justify-content:space-between;gap:8px;align-items:center;color:var(--muted);font-size:13.5px}
+  .ctl input[type=range]{width:150px}
+  nav.links a{color:var(--muted);text-decoration:none;margin-left:14px}
+  nav.links a.on,nav.links a:hover{color:var(--gold)}
+  @media (max-width:900px){main.graph{grid-template-columns:minmax(0,1fr);padding:12px}#stage{height:70vh}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>SpireWise</h1>
+    <nav class="links"><a href="index.html">Card advisor</a><a href="graph.html" class="on">Synergy map</a></nav>
+  </div>
+  <div class="controls">
+    <div class="seg" id="branch"></div>
+    <div class="seg" id="chars"></div>
+  </div>
+</header>
+<main class="graph">
+  <section class="panel" id="stage"><svg id="svg"></svg></section>
+  <aside class="side">
+    <section class="panel ctl">
+      <h2>Synergy map</h2>
+      <p class="muted small" id="meta"></p>
+      <label>Connections shown <input type="range" id="nedges" min="20" max="250" value="90"><span id="nedges-v"></span></label>
+      <label>Wins together <input type="checkbox" id="show-pos" checked></label>
+      <label>Loses together <input type="checkbox" id="show-neg" checked></label>
+      <label>Find a card <input id="find" placeholder="e.g. Afterimage" autocomplete="off" style="width:150px"></label>
+      <div class="legend"><span><span class="sw" style="background:var(--good)"></span>better together</span><span><span class="sw" style="background:var(--bad)"></span>worse together</span><span>ring size = card's own value</span></div>
+    </section>
+    <section class="panel side" id="detail" style="margin-top:16px"><p class="muted small">Click a card to see its best and worst partners. Drag to rearrange, scroll to zoom.</p></section>
+    <section class="panel" style="margin-top:16px">
+      <p class="muted small"><b>What a line means:</b> picking one card when the other is already in your deck changes your odds of winning by the amount shown, compared with picking it without that partner. That comes from offered-vs-skipped picks at A10, adjusted for floor, deck size and the rest of the deck, with small samples pulled toward zero. It is not "decks that won had both", which mostly rewards cards picked late in runs that were already winning.</p>
+    </section>
+  </aside>
+</main>
+<footer><p>Run data from <a href="https://spire-codex.com" target="_blank" rel="noopener">Spire Codex</a> community exports (solo, unmodded runs). Card names, text and art © Mega Crit Games. Fan project, not affiliated with or endorsed by Mega Crit.</p></footer>
+<script src="d3.min.js"></script>
+<script src="graph.js"></script>
+</body>
+</html>
