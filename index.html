@@ -14,6 +14,7 @@
     <span class="tag">A10 card advisor · Slay the Spire 2</span>
   </div>
   <div class="controls">
+    <div class="seg" id="mode"></div>
     <div class="seg" id="branch"></div>
     <div class="seg" id="chars"></div>
   </div>
@@ -36,6 +37,7 @@
       </div>
       <label class="floor">Floor <input id="floor" type="number" min="1" max="60" value="5"></label>
     </div>
+    <div id="mates" class="mates"></div>
     <ul id="deck-list" class="deck-list"></ul>
   </section>
 
@@ -46,6 +48,11 @@
     </div>
     <div class="slots" id="slots"></div>
     <div id="reward-result"></div>
+  </section>
+
+  <section class="panel team" id="team-panel" hidden>
+    <div class="panel-head"><h2>Your team</h2><span class="muted" id="team-n"></span></div>
+    <div id="team"></div>
   </section>
   </div>
 
@@ -63,7 +70,7 @@
 </main>
 
 <footer>
-  <p><b>How to read it:</b> "+3.2%" means runs that picked this card in a deck like yours won 3.2 percentage points more often than runs that were offered it and skipped it, on the same branch, at Ascension 10, at a similar floor. Synergy is the part of that which comes from cards already in your deck. Cards marked <span class="pill low">low data</span> show an overall value without deck context.</p>
+  <p><b>How to read it:</b> "+3.2%" means runs that picked this card in a deck like yours won 3.2 percentage points more often than runs that were offered it and skipped it, on the same branch, at Ascension 10, at a similar floor. Synergy is the part of that which comes from cards already in your deck. In co-op mode the numbers come from co-op runs and account for team size and your teammates' characters. Cards marked <span class="pill low">low data</span> show an overall value without deck context.</p>
   <p>Run data from <a href="https://spire-codex.com" target="_blank" rel="noopener">Spire Codex</a> community exports (solo, unmodded runs). Card names, text and art © Mega Crit Games. Fan project, not affiliated with or endorsed by Mega Crit. Free, no ads.</p>
 </footer>
 <script src="app.js"></script>

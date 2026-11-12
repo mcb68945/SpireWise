@@ -85,3 +85,11 @@ footer{padding:8px 24px 30px;color:var(--muted);font-size:13px;max-width:1000px}
   .detail img{width:160px}
   header{padding:14px 12px}
 }
+
+.mates{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center}
+.mates select{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 8px;font:inherit}
+.team-row{display:grid;grid-template-columns:1fr 70px 110px;gap:8px;align-items:center;padding:5px 6px;border-radius:8px;font-size:14px}
+.team-row.me{background:var(--panel2);outline:1px solid var(--gold)}
+.team-row .lu{display:flex;gap:4px;flex-wrap:wrap}
+.chip{font-size:12px;padding:1px 7px;border-radius:999px;border:1px solid var(--line)}
+.team h3{font:600 14px Georgia,serif;margin:10px 0 4px;color:var(--gold)}

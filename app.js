@@ -2,6 +2,8 @@
 const BRANCHES = [{ id: "v0.107.1", label: "Live", note: "main branch v0.107.1" },
                   { id: "v0.111.0", label: "Beta", note: "beta branch v0.111.0" }];
 const CHARS = ["ironclad", "silent", "defect", "regent", "necrobinder"];
+const MODES = [{ id: "solo", label: "Solo" }, { id: "coop", label: "Co-op" }];
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
 const POOL_EXTRA = ["colorless", "curse", "status", "event", "token", "quest"];
 const $ = (s) => document.querySelector(s);
 const sig = (z) => 1 / (1 + Math.exp(-z));
@@ -18,19 +20,33 @@ const S = {
   ch: store.get("ch", "ironclad"),
   decks: store.get("decks", {}),
   floor: store.get("floor", 5),
+  mode: store.get("mode", "solo"),
+  mates: store.get("mates", ["silent"]),
   slots: ["", "", ""],
   open: new Set(),
 };
 
 const deck = () => (S.decks[S.ch] ||= {});
-const save = () => { store.set("branch", S.branch); store.set("ch", S.ch); store.set("decks", S.decks); store.set("floor", S.floor); };
+const save = () => { store.set("branch", S.branch); store.set("ch", S.ch); store.set("decks", S.decks); store.set("floor", S.floor); store.set("mode", S.mode); store.set("mates", S.mates); };
 const name = (id) => CARDS[id]?.name || DATA[key()]?.names?.[id] || id.replace(/^CARD\./, "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 const img = (id) => (CARDS[id]?.img ? "img/cards/" + CARDS[id].img : "");
-const key = () => S.branch + "/" + S.ch;
+const key = () => S.branch + "/" + S.ch + "/" + S.mode;
+const LINEUPS = {};
 
 async function loadData() {
   const k = key();
-  if (!DATA[k]) DATA[k] = await (await fetch(`data/${S.branch}/${S.ch}.json`)).json();
+  if (!DATA[k]) {
+    const solo = await (await fetch(`data/${S.branch}/${S.ch}.json`)).json();
+    if (S.mode === "coop") {
+      const co = await (await fetch(`data/${S.branch}/${S.ch}.coop.json`)).json();
+      // rare cards without a co-op model fall back to the solo estimate, flagged as low data
+      const simple = { ...solo.simple };
+      for (const [id, m] of Object.entries(solo.models)) if (!co.models[id]) simple[id] = { value: m.value, se: 0.03, picks: m.picks, skips: m.offers - m.picks };
+      for (const id of Object.keys(co.models)) delete simple[id];
+      DATA[k] = { ...co, runs: co.seats, simple, names: { ...solo.names, ...co.names } };
+    } else DATA[k] = solo;
+  }
+  if (S.mode === "coop" && !LINEUPS[S.branch]) LINEUPS[S.branch] = await (await fetch(`data/${S.branch}/coop_lineups.json`)).json();
   return DATA[k];
 }
 
@@ -42,6 +58,11 @@ function score(id, D) {
     const b = Math.min(Math.floor((Math.max(1, S.floor) - 1) / 9), 5);
     let z0 = m.a + m.bucket[b] + m.k * n / 10, g = 0;
     for (const p of set) { if (m.delta[p]) z0 += m.delta[p]; if (m.gamma[p]) g += m.gamma[p]; }
+    if (m.np) {   // co-op: team size and teammates' characters
+      const np = Math.min(Math.max(S.mates.length + 1, 2), 4) - 2;
+      z0 += m.np[np]; g += m.pnp[np];
+      for (const t of S.mates) { z0 += m.mate[t] || 0; g += m.pmate[t] || 0; }
+    }
     const base = sig(z0 + m.beta) - sig(z0), gain = sig(z0 + m.beta + g) - sig(z0);
     const contrib = set.filter((p) => m.gamma[p]).map((p) => ({ p, v: sig(z0 + m.beta + m.gamma[p]) - sig(z0 + m.beta) }))
       .sort((x, y) => Math.abs(y.v) - Math.abs(x.v));
@@ -88,7 +109,31 @@ function autocomplete(input, list, onPick) {
 }
 
 // ---------- render ----------
+function renderMates() {
+  const el = $("#mates");
+  if (S.mode !== "coop") { el.innerHTML = ""; return; }
+  const opt = (sel) => CHARS.map((c) => `<option value="${c}" ${c === sel ? "selected" : ""}>${cap(c)}</option>`).join("");
+  el.innerHTML = `<span class="muted">Teammates</span>` + [0, 1, 2].map((i) => `<select data-mate="${i}">
+      <option value="">${i === 0 ? "—" : "none"}</option>${opt(S.mates[i])}</select>`).join("");
+}
+function renderTeam() {
+  const panel = $("#team-panel");
+  panel.hidden = S.mode !== "coop";
+  if (S.mode !== "coop" || !LINEUPS[S.branch]) return;
+  const n = Math.min(Math.max(S.mates.length + 1, 2), 4), L = LINEUPS[S.branch].lineups[String(n)];
+  const mine = [S.ch, ...S.mates].sort().join("+");
+  const row = (l) => `<div class="team-row ${l.lineup.join("+") === mine ? "me" : ""}"><div class="lu">${l.lineup.map((c) => `<span class="chip" style="border-color:var(--${c})">${cap(c)}</span>`).join("")}</div>
+      <span class="g ${l.vs_avg >= 0 ? "pos" : "neg"}">${(l.win_rate * 100).toFixed(1)}%</span><span class="muted small">${l.runs.toLocaleString()} runs</span></div>`;
+  const me = L.lineups.find((l) => l.lineup.join("+") === mine);
+  const sorted = [...L.lineups].sort((a, b) => b.win_rate - a.win_rate);
+  $("#team-n").textContent = `${n} players · avg ${(L.avg_win_rate * 100).toFixed(1)}% win`;
+  $("#team").innerHTML = (me ? `<h3>Your lineup</h3>${row(me)}<p class="muted small">95% range ${(me.lo * 100).toFixed(1)}–${(me.hi * 100).toFixed(1)}% · ${pct(me.vs_avg)} vs the ${n}-player average</p>`
+      : `<p class="muted small">Your exact lineup has fewer than 30 recorded A10 runs.</p>`) +
+    `<h3>Best ${n}-player lineups</h3>${sorted.slice(0, 5).map(row).join("")}<h3>Worst</h3>${sorted.slice(-3).reverse().map(row).join("")}
+     <p class="muted small">Lineups reflect who plays them as well as the characters; treat small differences as noise.</p>`;
+}
 function renderControls() {
+  $("#mode").innerHTML = MODES.map((m) => `<button data-m="${m.id}" class="${m.id === S.mode ? "on" : ""}">${m.label}</button>`).join("");
   $("#branch").innerHTML = BRANCHES.map((b) => `<button data-b="${b.id}" class="${b.id === S.branch ? "on" : ""}" title="${b.note}">${b.label}</button>`).join("");
   $("#chars").innerHTML = CHARS.map((c) => `<button data-c="${c}" style="--c:var(--${c})" class="${c === S.ch ? "on" : ""}">${c[0].toUpperCase() + c.slice(1)}</button>`).join("");
 }
@@ -107,7 +152,7 @@ function bar(g, max) {
 function synPill(r) {
   if (r.low) return `<span class="pill low">low data</span>`;
   if (Math.abs(r.syn) < 0.003) return "";
-  return `<span class="pill ${r.syn > 0 ? "syn-pos" : "syn-neg"}">synergy ${pct(r.syn)}</span>`;
+  return `<span class="pill ${r.syn > 0 ? "syn-pos" : "syn-neg"}">${S.mode === "coop" ? "team+deck" : "synergy"} ${pct(r.syn)}</span>`;
 }
 function detail(r) {
   const c = CARDS[r.id] || {};
@@ -116,7 +161,7 @@ function detail(r) {
     <div><div class="ctext">${c.text || ""}</div>
     <h3>Why</h3><table>
       <tr><td>Pick value for a deck like yours</td><td class="num">${pct(r.base)}</td></tr>
-      ${r.low ? "" : `<tr><td>Synergy with cards in your deck</td><td class="num ${r.syn >= 0 ? "pos" : "neg"}">${pct(r.syn)}</td></tr>`}
+      ${r.low ? "" : `<tr><td>${S.mode === "coop" ? "Synergy with your deck and team" : "Synergy with cards in your deck"}</td><td class="num ${r.syn >= 0 ? "pos" : "neg"}">${pct(r.syn)}</td></tr>`}
       <tr><td><b>Total</b></td><td class="num"><b>${pct(r.gain)}</b></td></tr>
       <tr><td class="muted">Average value across all A10 offers</td><td class="num muted">${pct(r.avg)}</td></tr>
       <tr><td class="muted">Times offered · picked</td><td class="num muted">${r.offers.toLocaleString()} · ${r.picks.toLocaleString()}</td></tr>
@@ -135,7 +180,9 @@ async function renderRank() {
   rows.sort((a, b) => rankKey(b) - rankKey(a));
   const max = Math.max(0.02, ...rows.map((r) => Math.abs(r.gain)));
   const br = BRANCHES.find((b) => b.id === S.branch);
-  $("#meta").textContent = `${br.label} (${br.note}) · ${S.ch} · ${D.runs.toLocaleString()} A10 runs, ${(D.wins / D.runs * 100).toFixed(1)}% won · floor ${S.floor}`;
+  $("#meta").textContent = S.mode === "coop"
+    ? `${br.label} (${br.note}) · co-op · ${S.ch} with ${S.mates.map(cap).join(", ") || "—"} · ${D.runs.toLocaleString()} A10 co-op player-runs · floor ${S.floor}`
+    : `${br.label} (${br.note}) · ${S.ch} · ${D.runs.toLocaleString()} A10 runs, ${(D.wins / D.runs * 100).toFixed(1)}% won · floor ${S.floor}`;
   $("#rank").innerHTML = rows.map((r, i) => `<li data-id="${r.id}" class="${S.open.has(r.id) ? "open" : ""}">
       <div class="top"><span class="i">${i + 1}</span>${img(r.id) ? `<img class="th" src="${img(r.id)}" alt="" loading="lazy">` : `<span></span>`}
         <div><div class="nm">${name(r.id)}${synPill(r)}</div><div class="sub">${[CARDS[r.id]?.rarity, CARDS[r.id]?.type, CARDS[r.id]?.cost != null ? CARDS[r.id].cost + " energy" : ""].filter(Boolean).join(" · ")}</div></div>
@@ -163,12 +210,19 @@ function renderSlots() {
   });
 }
 async function renderAll() {
-  renderControls(); renderDeck(); renderSlots();
-  await loadData(); renderRank(); renderReward(); save();
+  renderControls(); renderMates(); renderDeck(); renderSlots();
+  await loadData(); renderRank(); renderReward(); renderTeam(); save();
 }
 
 // ---------- events ----------
 function wire() {
+  $("#mode").addEventListener("click", (e) => { const m = e.target.dataset.m; if (m) { S.mode = m; renderAll(); } });
+  $("#mates").addEventListener("change", (e) => {
+    const i = e.target.dataset.mate; if (i == null) return;
+    const v = [...document.querySelectorAll("[data-mate]")].map((s) => s.value).filter(Boolean);
+    S.mates = v.length ? v : [];
+    renderMates(); renderRank(); renderReward(); renderTeam(); save();
+  });
   $("#branch").addEventListener("click", (e) => { const b = e.target.dataset.b; if (b) { S.branch = b; renderAll(); } });
   $("#chars").addEventListener("click", (e) => { const c = e.target.dataset.c; if (c) { S.ch = c; S.slots = ["", "", ""]; renderAll(); } });
   autocomplete($("#deck-search"), $("#deck-suggest"), (id) => { deck()[id] = (deck()[id] || 0) + 1; renderDeck(); renderRank(); renderReward(); save(); });
@@ -194,6 +248,8 @@ function wire() {
   [CARDS, STARTERS] = await Promise.all([fetch("data/cards.json").then((r) => r.json()), fetch("data/starters.json").then((r) => r.json())]);
   if (!BRANCHES.some((b) => b.id === S.branch)) S.branch = BRANCHES[0].id;
   if (!CHARS.includes(S.ch)) S.ch = "ironclad";
+  if (!MODES.some((m) => m.id === S.mode)) S.mode = "solo";
+  S.mates = (S.mates || []).filter((c) => CHARS.includes(c)).slice(0, 3);
   if (!Object.keys(deck()).length) S.decks[S.ch] = { ...(STARTERS[S.ch] || {}) };
   wire(); renderAll();
 })();
