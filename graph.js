@@ -7,7 +7,10 @@ const store = {
   set(k, v) { try { localStorage.setItem("spirewise." + k, JSON.stringify(v)); } catch {} },
 };
 const S = { branch: store.get("branch", "v0.107.1"), ch: store.get("ch", "ironclad"), sel: null, view: "focus" };
-let CARDS = {}, D = null, PAIRS = [], BYCARD = new Map();
+let CARDS = {}, D = null, PAIRS = [], BYCARD = new Map(), PAIRW = new Map();
+const pairW = (a, b) => PAIRW.get(a < b ? a + "|" + b : b + "|" + a);
+// The deck entered in the Card advisor (same browser storage), minus basics and curses.
+const myDeck = () => new Set(Object.keys((store.get("decks", {}) || {})[S.ch] || {}).filter((id) => !skip(id)));
 const name = (id) => CARDS[id]?.name || D?.names?.[id] || id.replace(/^CARD\./, "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 const img = (id) => (CARDS[id]?.img ? "img/cards/" + CARDS[id].img : "");
 const odds = (w) => { const x = (Math.exp(w) - 1) * 100; return (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(0) + "% odds"; };
@@ -28,6 +31,7 @@ async function load() {
     }
   }
   PAIRS = [...acc.values()].map((x) => ({ source: x.a, target: x.b, w: x.s / x.n, both: x.n === 2 }));
+  PAIRW = new Map(PAIRS.map((e) => [e.source + "|" + e.target, e.w]));
   BYCARD = new Map();
   for (const e of PAIRS) for (const [me, other] of [[e.source, e.target], [e.target, e.source]]) {
     if (!BYCARD.has(me)) BYCARD.set(me, []);
@@ -110,7 +114,13 @@ function drawFocus() {
   const cx = W / 2, cy = H / 2, R = Math.min(W * (narrow ? 0.38 : 0.36), H * 0.40);
   const rC = narrow ? 36 : 52, rP = narrow ? 21 : 30;
   const list = (BYCARD.get(id) || []).slice().sort((a, b) => b.w - a.w);
-  const pos = list.filter((x) => x.w > 0).slice(0, narrow ? 5 : 7), neg = list.filter((x) => x.w < 0).slice(narrow ? -3 : -5).reverse();
+  const deck = myDeck();
+  const withDeck = (arr, extra, cap) => { const ids = new Set(arr.map((x) => x.id)); return [...arr, ...extra.filter((x) => !ids.has(x.id))].slice(0, cap); };
+  const posAll = list.filter((x) => x.w > 0), negAll = list.filter((x) => x.w < 0).reverse();
+  const pos = withDeck(posAll.slice(0, narrow ? 5 : 7), posAll.filter((x) => deck.has(x.id) && x.w >= 0.015), narrow ? 6 : 9)
+    .sort((a, b) => b.w - a.w);
+  const neg = withDeck(negAll.slice(0, narrow ? 3 : 5), negAll.filter((x) => deck.has(x.id) && x.w <= -0.015), narrow ? 4 : 6)
+    .sort((a, b) => a.w - b.w);
   const place = (arr, a0, a1) => arr.map((x, i) => {
     const a = arr.length === 1 ? (a0 + a1) / 2 : a0 + (a1 - a0) * i / (arr.length - 1);
     return { ...x, x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) };
@@ -123,10 +133,11 @@ function drawFocus() {
   const cardNode = (sel, d, r, i) => {
     defs.append("clipPath").attr("id", "f" + i).append("circle").attr("r", r - 2);
     const n = sel.append("g").attr("class", "node").attr("transform", `translate(${d.x},${d.y})`);
+    if (deck.has(d.id)) n.append("circle").attr("r", r + 5).attr("fill", "none").attr("stroke", "var(--gold)").attr("stroke-width", 2.5).attr("stroke-dasharray", "4 3");
     n.append("circle").attr("class", "ring").attr("r", r).attr("stroke", value(d.id) >= 0 ? "var(--good)" : "var(--bad)");
     if (img(d.id)) n.append("image").attr("href", img(d.id)).attr("width", r * 2.9).attr("height", r * 4.06)
       .attr("x", -r * 1.45).attr("y", -r * 1.45).attr("clip-path", `url(#f${i})`).attr("preserveAspectRatio", "xMidYMin slice");
-    n.append("text").attr("y", r + 15).text(name(d.id));
+    n.append("text").attr("y", r + 15).text((deck.has(d.id) ? "★ " : "") + name(d.id));
     return n;
   };
   const links = g.append("g");
@@ -144,18 +155,83 @@ function drawFocus() {
   if (narrow) g.selectAll(".node text").attr("font-size", 10);
   g.append("text").attr("x", cx + R * 0.5).attr("y", 26).attr("text-anchor", "middle").attr("fill", "var(--good)").attr("font-size", 14).text("wins more with →");
   g.append("text").attr("x", cx - R * 0.5).attr("y", 26).attr("text-anchor", "middle").attr("fill", "var(--bad)").attr("font-size", 14).text("← loses more with");
+  if (deck.size) g.append("text").attr("x", cx).attr("y", H - 14).attr("text-anchor", "middle").attr("fill", "var(--gold)").attr("font-size", 13).text("★ gold ring = already in your deck");
   if (!P.length) g.append("text").attr("x", cx).attr("y", cy + 90).attr("text-anchor", "middle").attr("fill", "var(--muted)").text("No partners with enough data for this card.");
+}
+// "Your deck" view: deck cards on the outer ring, best additions inside, links among all of them.
+function drawDeck() {
+  const svg = d3.select("#svg"); svg.selectAll("*").remove();
+  const { width: W, height: H } = $("#stage").getBoundingClientRect();
+  const deck = [...myDeck()].filter((id) => BYCARD.has(id));
+  if (!deck.length) {
+    svg.append("text").attr("x", W / 2).attr("y", H / 2).attr("text-anchor", "middle").attr("fill", "var(--muted)")
+      .text("No deck yet. Add cards in the Card advisor, then come back.");
+    $("#detail").innerHTML = `<p class="muted small">Build your deck on the <a href="index.html">Card advisor</a> page; this view reads it from your browser.</p>`;
+    return;
+  }
+  const narrow = W < 600, cx = W / 2, cy = H / 2, R = Math.min(W, H) * (narrow ? 0.40 : 0.40);
+  const rD = narrow ? 18 : 26, rA = narrow ? 22 : 32;
+  // candidates: summed association with the cards you already have
+  const cand = [...BYCARD.keys()].filter((id) => !deck.includes(id)).map((id) => {
+    const parts = deck.map((p) => ({ p, w: pairW(id, p) || 0 })).filter((x) => x.w);
+    return { id, total: parts.reduce((s, x) => s + x.w, 0), parts };
+  }).filter((c) => c.total > 0).sort((a, b) => b.total - a.total).slice(0, narrow ? 4 : 6);
+  const nodes = [
+    ...deck.map((id, i) => ({ id, r: rD, inDeck: true, x: cx + R * Math.cos(2 * Math.PI * i / deck.length - Math.PI / 2), y: cy + R * Math.sin(2 * Math.PI * i / deck.length - Math.PI / 2) })),
+    ...cand.map((c, i) => ({ id: c.id, r: rA, inDeck: false, total: c.total, x: cx + R * 0.42 * Math.cos(2 * Math.PI * i / cand.length - Math.PI / 2), y: cy + R * 0.42 * Math.sin(2 * Math.PI * i / cand.length - Math.PI / 2) })),
+  ];
+  const at = new Map(nodes.map((n) => [n.id, n]));
+  // Keep it readable: each addition's 3 strongest links into your deck, plus the 8 strongest pairs within your deck.
+  const edges = [];
+  for (const c of cand) c.parts.filter((x) => x.w > 0).sort((x, y) => y.w - x.w).slice(0, 3)
+    .forEach((x) => edges.push({ a: at.get(c.id), b: at.get(x.p), w: x.w }));
+  const inner = [];
+  for (let i = 0; i < deck.length; i++) for (let k = i + 1; k < deck.length; k++) {
+    const w = pairW(deck[i], deck[k]); if (w && Math.abs(w) >= 0.012) inner.push({ a: at.get(deck[i]), b: at.get(deck[k]), w });
+  }
+  edges.push(...inner.sort((x, y) => Math.abs(y.w) - Math.abs(x.w)).slice(0, 8));
+  const wmax = Math.max(0.01, ...edges.map((e) => Math.abs(e.w)));
+  const g = svg.append("g");
+  svg.call(d3.zoom().scaleExtent([0.5, 3]).on("zoom", (ev) => g.attr("transform", ev.transform)));
+  const defs = svg.append("defs");
+  g.append("g").selectAll("path").data(edges).join("path").attr("class", "edge")
+    .attr("d", (e) => { const mx = (e.a.x + e.b.x) / 2, my = (e.a.y + e.b.y) / 2; return `M${e.a.x},${e.a.y}Q${mx + (cx - mx) * 0.35},${my + (cy - my) * 0.35} ${e.b.x},${e.b.y}`; })
+    .attr("stroke", (e) => (e.w > 0 ? "var(--good)" : "var(--bad)")).attr("stroke-dasharray", (e) => (e.w > 0 ? null : "6 4"))
+    .attr("stroke-width", (e) => 0.8 + 7 * (Math.abs(e.w) / wmax) ** 1.3).attr("stroke-opacity", (e) => 0.3 + 0.7 * (Math.abs(e.w) / wmax) ** 1.3)
+    .append("title").text((e) => `${name(e.a.id)} + ${name(e.b.id)}: ${odds(e.w)}`);
+  const node = g.append("g").selectAll("g").data(nodes).join("g").attr("class", "node").attr("transform", (d) => `translate(${d.x},${d.y})`)
+    .on("click", (ev, d) => { S.view = "focus"; redraw(); select(d.id); });
+  node.filter((d) => d.inDeck).append("circle").attr("r", (d) => d.r + 5).attr("fill", "none").attr("stroke", "var(--gold)").attr("stroke-width", 2.5).attr("stroke-dasharray", "4 3");
+  node.append("circle").attr("class", "ring").attr("r", (d) => d.r).attr("stroke", (d) => (value(d.id) >= 0 ? "var(--good)" : "var(--bad)"));
+  node.each(function (d, i) {
+    defs.append("clipPath").attr("id", "d" + i).append("circle").attr("r", d.r - 2);
+    if (img(d.id)) d3.select(this).append("image").attr("href", img(d.id)).attr("width", d.r * 2.9).attr("height", d.r * 4.06)
+      .attr("x", -d.r * 1.45).attr("y", -d.r * 1.45).attr("clip-path", `url(#d${i})`).attr("preserveAspectRatio", "xMidYMin slice");
+  });
+  node.append("text").attr("y", (d) => d.r + 14).attr("font-size", narrow ? 10 : 11).text((d) => (d.inDeck ? "★ " : "+ ") + name(d.id));
+  node.append("title").text((d) => d.inDeck ? `${name(d.id)} (in your deck)` : `${name(d.id)}: ${odds(d.total)} with your deck`);
+  g.append("text").attr("x", cx).attr("y", cy + 4).attr("text-anchor", "middle").attr("fill", "var(--muted)").attr("font-size", 12).text(cand.length ? "best additions" : "");
+
+  // side panel
+  const links = inner.sort((x, y) => y.w - x.w);
+  const row = (a, b, w) => `<tr><td>${name(a)} + ${name(b)}</td><td class="num ${w >= 0 ? "pos" : "neg"}">${odds(w)}</td></tr>`;
+  $("#detail").innerHTML = `<h2>Your deck</h2><p class="muted small">${deck.length} non-basic cards from the Card advisor. Click any card to focus on it.</p>
+    <h3>Best additions <span class="muted small">(combined with your deck)</span></h3>${cand.length ? `<table>${cand.map((c) => `<tr><td><a href="#" data-pick="${c.id}">${name(c.id)}</a><div class="muted small">with ${c.parts.filter((x) => x.w > 0).sort((a, b) => b.w - a.w).slice(0, 3).map((x) => name(x.p)).join(", ")}</div></td><td class="num pos">${odds(c.total)}</td></tr>`).join("")}</table>` : `<p class="muted small">No strong additions found.</p>`}
+    <h3>Strongest pairs already in your deck</h3>${links.filter((e) => e.w > 0).length ? `<table>${links.filter((e) => e.w > 0).slice(0, 5).map((e) => row(e.a.id, e.b.id, e.w)).join("")}</table>` : `<p class="muted small">None above the threshold.</p>`}
+    <h3>Pairs working against each other</h3>${links.filter((e) => e.w < 0).length ? `<table>${links.filter((e) => e.w < 0).reverse().slice(0, 4).map((e) => row(e.a.id, e.b.id, e.w)).join("")}</table>` : `<p class="muted small">None above the threshold.</p>`}`;
 }
 function renderPicks() {
   // quick picks: the most valuable cards that have partners
-  const top = [...BYCARD.keys()].filter((id) => (BYCARD.get(id) || []).length >= 4).sort((a, b) => value(b) - value(a)).slice(0, 12);
-  $("#picks").innerHTML = top.map((id) => `<button data-q="${id}" class="${id === S.sel ? "on" : ""}">${name(id)}</button>`).join("");
+  const deck = [...myDeck()].filter((id) => BYCARD.has(id)).sort((a, b) => name(a).localeCompare(name(b)));
+  const top = [...BYCARD.keys()].filter((id) => (BYCARD.get(id) || []).length >= 4 && !deck.includes(id)).sort((a, b) => value(b) - value(a)).slice(0, deck.length ? 6 : 12);
+  const btn = (id) => `<button data-q="${id}" class="${id === S.sel ? "on" : ""}">${name(id)}</button>`;
+  $("#picks").innerHTML = (deck.length ? `<span class="muted small">Your deck:</span>${deck.map(btn).join("")}<span class="muted small" style="margin-left:8px">Top cards:</span>` : "") + top.map(btn).join("");
 }
 function redraw() {
-  document.body.classList.toggle("focus", S.view === "focus");
+  document.body.classList.toggle("focus", S.view !== "overview");
   [...document.querySelectorAll("#view button")].forEach((b) => b.classList.toggle("on", b.dataset.v === S.view));
   $("#picks").style.display = S.view === "focus" ? "" : "none";
-  if (S.view === "focus") { renderPicks(); drawFocus(); } else draw();
+  if (S.view === "focus") { renderPicks(); drawFocus(); if (S.sel) select(S.sel); } else if (S.view === "deck") drawDeck(); else draw();
 }
 
 function highlight(id) {
@@ -195,7 +271,7 @@ async function render() {
   for (const id of ["#nedges", "#show-pos", "#show-neg"]) $(id).addEventListener("input", draw);
   $("#view").addEventListener("click", (e) => { if (e.target.dataset.v) { S.view = e.target.dataset.v; redraw(); if (S.sel && S.view === "overview") highlight(S.sel); } });
   $("#picks").addEventListener("click", (e) => { if (e.target.dataset.q) select(e.target.dataset.q); });
-  window.addEventListener("resize", () => { if (S.view === "focus") drawFocus(); });
+  window.addEventListener("resize", () => { if (S.view === "focus") drawFocus(); else if (S.view === "deck") drawDeck(); });
   $("#detail").addEventListener("click", (e) => {
     if (e.target.dataset.pick) { e.preventDefault(); select(e.target.dataset.pick); }
     if (e.target.id === "clear-sel") { e.preventDefault(); if (window._graph) { window._graph.node.classed("dim", false); window._graph.link.classed("dim", false); } }

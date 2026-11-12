@@ -149,6 +149,11 @@ function bar(g, max) {
   const w = Math.min(50, (Math.abs(g) / max) * 50);
   return `<div class="bar"><span style="${g >= 0 ? `left:50%;width:${w}%;background:var(--good)` : `right:50%;width:${w}%;background:var(--bad)`}"></span></div>`;
 }
+// deck cards that most raise this card's value (strong associations already in your deck)
+function withDeck(r) {
+  const top = (r.contrib || []).filter((x) => x.v >= 0.004 && CARDS[x.p]?.rarity !== "Basic").sort((a, b) => b.v - a.v).slice(0, 2);
+  return top.length ? ` · <span class="pos">with ${top.map((x) => `${name(x.p)} ${pct(x.v)}`).join(", ")}</span>` : "";
+}
 function synPill(r) {
   if (r.low) return `<span class="pill low">low data</span>`;
   if (Math.abs(r.syn) < 0.003) return "";
@@ -185,7 +190,7 @@ async function renderRank() {
     : `${br.label} (${br.note}) · ${S.ch} · ${D.runs.toLocaleString()} A10 runs, ${(D.wins / D.runs * 100).toFixed(1)}% won · floor ${S.floor}`;
   $("#rank").innerHTML = rows.map((r, i) => `<li data-id="${r.id}" class="${S.open.has(r.id) ? "open" : ""}">
       <div class="top"><span class="i">${i + 1}</span>${img(r.id) ? `<img class="th" src="${img(r.id)}" alt="" loading="lazy">` : `<span></span>`}
-        <div><div class="nm">${name(r.id)}${synPill(r)}</div><div class="sub">${[CARDS[r.id]?.rarity, CARDS[r.id]?.type, CARDS[r.id]?.cost != null ? CARDS[r.id].cost + " energy" : ""].filter(Boolean).join(" · ")}</div></div>
+        <div><div class="nm">${name(r.id)}${synPill(r)}</div><div class="sub">${[CARDS[r.id]?.rarity, CARDS[r.id]?.type, CARDS[r.id]?.cost != null ? CARDS[r.id].cost + " energy" : ""].filter(Boolean).join(" · ")}${withDeck(r)}</div></div>
         ${bar(r.gain, max)}<span class="g ${r.gain >= 0 ? "pos" : "neg"}">${pct(r.gain)}</span></div>${detail(r)}</li>`).join("");
 }
 async function renderReward() {
