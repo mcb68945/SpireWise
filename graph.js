@@ -6,7 +6,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem("spirewise." + k); return v ? JSON.parse(v) : d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem("spirewise." + k, JSON.stringify(v)); } catch {} },
 };
-const S = { branch: store.get("branch", "v0.107.1"), ch: store.get("ch", "ironclad"), sel: null };
+const S = { branch: store.get("branch", "v0.107.1"), ch: store.get("ch", "ironclad"), sel: null, view: "focus" };
 let CARDS = {}, D = null, PAIRS = [], BYCARD = new Map();
 const name = (id) => CARDS[id]?.name || D?.names?.[id] || id.replace(/^CARD\./, "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 const img = (id) => (CARDS[id]?.img ? "img/cards/" + CARDS[id].img : "");
@@ -56,13 +56,14 @@ function draw() {
   const svg = d3.select("#svg"); svg.selectAll("*").remove();
   const { width, height } = $("#stage").getBoundingClientRect();
   const g = svg.append("g");
-  svg.call(d3.zoom().scaleExtent([0.2, 4]).on("zoom", (ev) => g.attr("transform", ev.transform)));
+  const zoom = d3.zoom().scaleExtent([0.2, 4]).on("zoom", (ev) => g.attr("transform", ev.transform));
+  svg.call(zoom);
   const defs = svg.append("defs");
   nodes.forEach((d, i) => { d.clip = "c" + i; defs.append("clipPath").attr("id", d.clip).append("circle").attr("r", d.r - 2); });
 
   const link = g.append("g").selectAll("path").data(edges).join("path").attr("class", "edge")
     .attr("stroke", (e) => (e.w > 0 ? "var(--good)" : "var(--bad)"))
-    .attr("stroke-width", (e) => 1 + 5 * Math.abs(e.w) / wmax).attr("stroke-opacity", 0.75)
+    .attr("stroke-width", (e) => 0.8 + 7 * (Math.abs(e.w) / wmax) ** 1.3).attr("stroke-opacity", (e) => 0.32 + 0.68 * (Math.abs(e.w) / wmax) ** 1.3)
     .attr("stroke-dasharray", (e) => (e.w > 0 ? null : "6 4"));
   link.append("title").text((e) => `${name(e.source)} + ${name(e.target)}: ${odds(e.w)}`);
 
@@ -76,6 +77,7 @@ function draw() {
     .attr("width", (d) => d.r * 2.9).attr("height", (d) => d.r * 4.06).attr("x", (d) => -d.r * 1.45).attr("y", (d) => -d.r * 1.45)
     .attr("clip-path", (d) => `url(#${d.clip})`).attr("preserveAspectRatio", "xMidYMin slice");
   node.append("text").attr("y", (d) => d.r + 13).text((d) => name(d.id));
+  node.classed("hidelabel", (d) => d.r < 24);
   node.append("title").text((d) => `${name(d.id)} · own value ${(d.v * 100).toFixed(1)}%`);
 
   sim?.stop();
@@ -83,13 +85,77 @@ function draw() {
     .force("link", d3.forceLink(edges).id((d) => d.id).distance((e) => 150 - 60 * Math.abs(e.w) / wmax).strength(0.5))
     .force("charge", d3.forceManyBody().strength(-380))
     .force("center", d3.forceCenter(width / 2, height / 2))
+    .force("x", d3.forceX(width / 2).strength(0.06)).force("y", d3.forceY(height / 2).strength(0.06))
     .force("collide", d3.forceCollide().radius((d) => d.r + 16))
     .on("tick", () => {
       link.attr("d", (e) => `M${e.source.x},${e.source.y}L${e.target.x},${e.target.y}`);
       node.attr("transform", (d) => `translate(${d.x},${d.y})`);
+    })
+    .on("end", () => {   // fit everything in view
+      const xs = nodes.map((d) => d.x), ys = nodes.map((d) => d.y);
+      const x0 = Math.min(...xs) - 50, x1 = Math.max(...xs) + 50, y0 = Math.min(...ys) - 50, y1 = Math.max(...ys) + 60;
+      const k = Math.min(width / (x1 - x0), height / (y1 - y0), 1.4);
+      svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity.translate(width / 2 - k * (x0 + x1) / 2, height / 2 - k * (y0 + y1) / 2).scale(k));
     });
   window._graph = { node, link };
   if (S.sel) highlight(S.sel);
+}
+
+// Focus view: chosen card in the centre, best partners fanned out on the right, worst on the left.
+function drawFocus() {
+  const id = S.sel; if (!id) return;
+  const svg = d3.select("#svg"); svg.selectAll("*").remove();
+  const { width: W, height: H } = $("#stage").getBoundingClientRect();
+  const narrow = W < 600;
+  const cx = W / 2, cy = H / 2, R = Math.min(W * (narrow ? 0.38 : 0.36), H * 0.40);
+  const rC = narrow ? 36 : 52, rP = narrow ? 21 : 30;
+  const list = (BYCARD.get(id) || []).slice().sort((a, b) => b.w - a.w);
+  const pos = list.filter((x) => x.w > 0).slice(0, narrow ? 5 : 7), neg = list.filter((x) => x.w < 0).slice(narrow ? -3 : -5).reverse();
+  const place = (arr, a0, a1) => arr.map((x, i) => {
+    const a = arr.length === 1 ? (a0 + a1) / 2 : a0 + (a1 - a0) * i / (arr.length - 1);
+    return { ...x, x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) };
+  });
+  const P = [...place(pos, -Math.PI * 0.42, Math.PI * 0.42), ...place(neg, Math.PI * 1.32, Math.PI * 0.68)];
+  const wmax = Math.max(0.01, ...P.map((p) => Math.abs(p.w)));
+  const g = svg.append("g");
+  svg.call(d3.zoom().scaleExtent([0.5, 3]).on("zoom", (ev) => g.attr("transform", ev.transform)));
+  const defs = svg.append("defs");
+  const cardNode = (sel, d, r, i) => {
+    defs.append("clipPath").attr("id", "f" + i).append("circle").attr("r", r - 2);
+    const n = sel.append("g").attr("class", "node").attr("transform", `translate(${d.x},${d.y})`);
+    n.append("circle").attr("class", "ring").attr("r", r).attr("stroke", value(d.id) >= 0 ? "var(--good)" : "var(--bad)");
+    if (img(d.id)) n.append("image").attr("href", img(d.id)).attr("width", r * 2.9).attr("height", r * 4.06)
+      .attr("x", -r * 1.45).attr("y", -r * 1.45).attr("clip-path", `url(#f${i})`).attr("preserveAspectRatio", "xMidYMin slice");
+    n.append("text").attr("y", r + 15).text(name(d.id));
+    return n;
+  };
+  const links = g.append("g");
+  P.forEach((p) => {
+    links.append("path").attr("class", "edge").attr("d", `M${cx},${cy}L${p.x},${p.y}`)
+      .attr("stroke", p.w > 0 ? "var(--good)" : "var(--bad)").attr("stroke-opacity", 0.22 + 0.78 * (Math.abs(p.w) / wmax) ** 1.3)
+      .attr("stroke-width", 1 + 9 * (Math.abs(p.w) / wmax) ** 1.3).attr("stroke-dasharray", p.w > 0 ? null : "7 5");
+    const mx = cx + (p.x - cx) * (narrow ? 0.62 : 0.55), my = cy + (p.y - cy) * (narrow ? 0.62 : 0.55);
+    links.append("text").attr("class", "elabel").attr("x", mx).attr("y", my - 6).attr("text-anchor", "middle")
+      .attr("fill", p.w > 0 ? "var(--good)" : "var(--bad)").text(odds(p.w).replace(" odds", ""));
+  });
+  const nodes = g.append("g");
+  P.forEach((p, i) => cardNode(nodes, p, rP, i).on("click", () => select(p.id)).append("title").text(`${name(p.id)}: ${odds(p.w)} together`));
+  cardNode(nodes, { id, x: cx, y: cy }, rC, "c");
+  if (narrow) g.selectAll(".node text").attr("font-size", 10);
+  g.append("text").attr("x", cx + R * 0.5).attr("y", 26).attr("text-anchor", "middle").attr("fill", "var(--good)").attr("font-size", 14).text("wins more with →");
+  g.append("text").attr("x", cx - R * 0.5).attr("y", 26).attr("text-anchor", "middle").attr("fill", "var(--bad)").attr("font-size", 14).text("← loses more with");
+  if (!P.length) g.append("text").attr("x", cx).attr("y", cy + 90).attr("text-anchor", "middle").attr("fill", "var(--muted)").text("No partners with enough data for this card.");
+}
+function renderPicks() {
+  // quick picks: the most valuable cards that have partners
+  const top = [...BYCARD.keys()].filter((id) => (BYCARD.get(id) || []).length >= 4).sort((a, b) => value(b) - value(a)).slice(0, 12);
+  $("#picks").innerHTML = top.map((id) => `<button data-q="${id}" class="${id === S.sel ? "on" : ""}">${name(id)}</button>`).join("");
+}
+function redraw() {
+  document.body.classList.toggle("focus", S.view === "focus");
+  [...document.querySelectorAll("#view button")].forEach((b) => b.classList.toggle("on", b.dataset.v === S.view));
+  $("#picks").style.display = S.view === "focus" ? "" : "none";
+  if (S.view === "focus") { renderPicks(); drawFocus(); } else draw();
 }
 
 function highlight(id) {
@@ -99,7 +165,8 @@ function highlight(id) {
   G.link.classed("dim", (e) => e.source.id !== id && e.target.id !== id);
 }
 function select(id) {
-  S.sel = id; highlight(id);
+  S.sel = id;
+  if (S.view === "focus") { renderPicks(); drawFocus(); } else highlight(id);
   const list = (BYCARD.get(id) || []).sort((a, b) => b.w - a.w);
   const row = (x) => `<tr><td><a href="#" data-pick="${x.id}">${name(x.id)}</a></td><td class="num ${x.w >= 0 ? "pos" : "neg"}">${odds(x.w)}</td></tr>`;
   const best = list.filter((x) => x.w > 0).slice(0, 8), worst = list.filter((x) => x.w < 0).slice(-6).reverse();
@@ -111,7 +178,13 @@ function select(id) {
     <p class="muted small" style="clear:both;margin-top:10px"><a href="#" id="clear-sel">clear selection</a></p>`;
 }
 
-async function render() { controls(); await load(); S.sel = null; $("#detail").innerHTML = `<p class="muted small">Click a card to see its best and worst partners. Drag to rearrange, scroll to zoom.</p>`; draw(); store.set("branch", S.branch); store.set("ch", S.ch); }
+async function render() {
+  controls(); await load();
+  const keep = S.sel && BYCARD.has(S.sel);
+  S.sel = keep ? S.sel : [...BYCARD.keys()].filter((id) => BYCARD.get(id).length >= 4).sort((a, b) => value(b) - value(a))[0];
+  redraw(); select(S.sel);
+  store.set("branch", S.branch); store.set("ch", S.ch);
+}
 
 (async function init() {
   CARDS = await (await fetch("data/cards.json")).json();
@@ -120,9 +193,12 @@ async function render() { controls(); await load(); S.sel = null; $("#detail").i
   $("#branch").addEventListener("click", (e) => { if (e.target.dataset.b) { S.branch = e.target.dataset.b; render(); } });
   $("#chars").addEventListener("click", (e) => { if (e.target.dataset.c) { S.ch = e.target.dataset.c; render(); } });
   for (const id of ["#nedges", "#show-pos", "#show-neg"]) $(id).addEventListener("input", draw);
+  $("#view").addEventListener("click", (e) => { if (e.target.dataset.v) { S.view = e.target.dataset.v; redraw(); if (S.sel && S.view === "overview") highlight(S.sel); } });
+  $("#picks").addEventListener("click", (e) => { if (e.target.dataset.q) select(e.target.dataset.q); });
+  window.addEventListener("resize", () => { if (S.view === "focus") drawFocus(); });
   $("#detail").addEventListener("click", (e) => {
     if (e.target.dataset.pick) { e.preventDefault(); select(e.target.dataset.pick); }
-    if (e.target.id === "clear-sel") { e.preventDefault(); S.sel = null; window._graph.node.classed("dim", false); window._graph.link.classed("dim", false); $("#detail").innerHTML = ""; }
+    if (e.target.id === "clear-sel") { e.preventDefault(); if (window._graph) { window._graph.node.classed("dim", false); window._graph.link.classed("dim", false); } }
   });
   $("#find").addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;

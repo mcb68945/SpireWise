@@ -15,6 +15,13 @@
   .node text{fill:var(--text);font-size:11px;text-anchor:middle;pointer-events:none;paint-order:stroke;stroke:#000;stroke-width:3px}
   .node{cursor:pointer}
   .dim{opacity:.12}
+  .picks{margin-bottom:10px;gap:6px}
+  .picks button{background:var(--panel);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:4px 10px;cursor:pointer;font-size:13px}
+  .picks button.on,.picks button:hover{color:var(--text);border-color:var(--gold)}
+  .node.hidelabel text{opacity:0}.node.hidelabel:hover text{opacity:1}
+  .elabel{font-size:12px;font-weight:700;paint-order:stroke;stroke:#000;stroke-width:3px}
+  .ctl .seg{width:max-content}
+  body.focus .ov{display:none}
   .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:8px}
   .sw{display:inline-block;width:22px;height:4px;border-radius:2px;vertical-align:middle;margin-right:5px}
   .side h3{font:600 14px Georgia,serif;margin:12px 0 4px;color:var(--gold)}
@@ -30,7 +37,7 @@
   @media (max-width:900px){main.graph{grid-template-columns:minmax(0,1fr);padding:12px}#stage{height:70vh}}
 </style>
 </head>
-<body>
+<body class="focus">
 <header>
   <div class="brand">
     <h1>SpireWise</h1>
@@ -42,18 +49,22 @@
   </div>
 </header>
 <main class="graph">
-  <section class="panel" id="stage"><svg id="svg"></svg></section>
+  <div>
+    <div class="row picks" id="picks"></div>
+    <section class="panel" id="stage"><svg id="svg"></svg></section>
+  </div>
   <aside class="side">
     <section class="panel ctl">
       <h2>Synergy map</h2>
       <p class="muted small" id="meta"></p>
-      <label>Connections shown <input type="range" id="nedges" min="20" max="250" value="90"><span id="nedges-v"></span></label>
-      <label>Wins together <input type="checkbox" id="show-pos" checked></label>
-      <label>Loses together <input type="checkbox" id="show-neg" checked></label>
+      <div class="seg" id="view"><button data-v="focus" class="on">Focus on a card</button><button data-v="overview">Overview</button></div>
+      <label class="ov">Connections shown <input type="range" id="nedges" min="10" max="150" value="35"><span id="nedges-v"></span></label>
+      <label class="ov">Wins together <input type="checkbox" id="show-pos" checked></label>
+      <label class="ov">Loses together <input type="checkbox" id="show-neg"></label>
       <label>Find a card <input id="find" placeholder="e.g. Afterimage" autocomplete="off" style="width:150px"></label>
-      <div class="legend"><span><span class="sw" style="background:var(--good)"></span>better together</span><span><span class="sw" style="background:var(--bad)"></span>worse together</span><span>ring size = card's own value</span></div>
+      <div class="legend"><span><span class="sw" style="background:var(--good)"></span>better together</span><span><span class="sw" style="background:var(--bad)"></span>worse together</span><span>thicker, brighter line = stronger effect</span><span>ring size = card's own value</span></div>
     </section>
-    <section class="panel side" id="detail" style="margin-top:16px"><p class="muted small">Click a card to see its best and worst partners. Drag to rearrange, scroll to zoom.</p></section>
+    <section class="panel side" id="detail" style="margin-top:16px"><p class="muted small">Pick a card above or search for one. Click any partner to move it to the centre.</p></section>
     <section class="panel" style="margin-top:16px">
       <p class="muted small"><b>What a line means:</b> picking one card when the other is already in your deck changes your odds of winning by the amount shown, compared with picking it without that partner. That comes from offered-vs-skipped picks at A10, adjusted for floor, deck size and the rest of the deck, with small samples pulled toward zero. It is not "decks that won had both", which mostly rewards cards picked late in runs that were already winning.</p>
     </section>
