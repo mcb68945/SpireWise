@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <AssemblyName>SpireWise</AssemblyName>
+    <RootNamespace>Spirewise</RootNamespace>
+    <Version>0.4.0</Version>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <NoWarn>$(NoWarn);MSB3270</NoWarn>
+    <!-- Folder holding sts2.dll, 0Harmony.dll and GodotSharp.dll from the game install
+         (Slay the Spire 2\data_sts2_windows_x86_64). Override: dotnet build -p:GameLibs=... -->
+    <GameLibs Condition="'$(GameLibs)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Slay the Spire 2\data_sts2_windows_x86_64</GameLibs>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="sts2"><HintPath>$(GameLibs)/sts2.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(GameLibs)/0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="GodotSharp"><HintPath>$(GameLibs)/GodotSharp.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <!-- Model data (gzipped JSON per branch/character) is embedded: the game's mod loader treats every
+       .json file under mods/ as a manifest, so loose data files would confuse it. -->
+  <ItemGroup>
+    <EmbeddedResource Include="data/**/*.json.gz" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

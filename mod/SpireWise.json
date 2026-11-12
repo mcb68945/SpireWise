@@ -1,0 +1,11 @@
+{
+  "id": "SpireWise",
+  "name": "SpireWise",
+  "author": "mcb68945",
+  "description": "Shows how much each card reward raises your chance to win, for your current deck, based on 100k+ Ascension 10 runs. Co-op aware. Remove/upgrade/transform, shop, rest sites, Ancients, win chance. F7 or Mod Settings toggles.",
+  "version": "0.4.0",
+  "has_pck": false,
+  "has_dll": true,
+  "dependencies": [],
+  "affects_gameplay": false
+}

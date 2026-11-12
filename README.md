@@ -6,5 +6,8 @@ A10 card advisor for Slay the Spire 2: for your current deck, how much each card
 - Method: one regularized logistic model per card, comparing offers that were picked against offers that were skipped,
   adjusted for floor, deck size and every card in the deck, with separate (heavier) regularization on pairwise synergy terms.
 - Static site: all scoring happens in the browser from `data/<version>/<character>.json`.
+- In-game mod: source in [`mod/`](mod/). Same models, shown on card rewards, shops, deck screens, rest sites, Ancient choices and the map.
+
+Run data: [Spire Codex](https://spire-codex.com) community exports. Thanks to Spire Codex for making them public.
 
 Card names, text and art © Mega Crit Games. Fan project, not affiliated with or endorsed by Mega Crit.
