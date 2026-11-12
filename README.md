@@ -1,4 +1,4 @@
-# Spirewise
+# SpireWise
 
 A10 card advisor for Slay the Spire 2: for your current deck, how much each card raises your chance to win if you pick it.
 
