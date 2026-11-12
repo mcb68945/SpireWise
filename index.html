@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SpireWise — A10 card advisor for Slay the Spire 2</title>
-<meta name="description" content="Which card should you pick? Win-rate gain for every card given your current Slay the Spire 2 deck, from 100k+ Ascension 10 runs.">
+<meta name="description" content="Which card should you pick? Win-rate gain for every card, relic and choice given your current Slay the Spire 2 deck, from 100k+ Ascension 10 runs.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -53,8 +53,20 @@
 
   <section class="panel fix">
     <div class="panel-head"><h2>Remove / upgrade</h2>
-      <div class="seg" id="fix-tab"><button data-t="remove" class="on">Remove</button><button data-t="upgrade">Upgrade</button><button data-t="doors">Doors event</button></div></div>
+      <div class="seg" id="fix-tab"><button data-t="remove" class="on">Remove</button><button data-t="upgrade">Upgrade</button><button data-t="transform">Transform</button><button data-t="doors" title="Doors of Light and Dark event">Doors</button></div></div>
     <div id="fix"></div>
+  </section>
+
+  <section class="panel run">
+    <div class="panel-head"><h2>Run</h2>
+      <div class="seg" id="run-tab"><button data-t="win" class="on">Win chance</button><button data-t="relics">Relics</button><button data-t="rest">Rest site</button></div></div>
+    <div class="run-stats" id="run-stats">
+      <label>HP <input id="run-hp" type="number" min="0" max="999"></label>
+      <label>Max HP <input id="run-mhp" type="number" min="1" max="999"></label>
+      <label>Gold <input id="run-gold" type="number" min="0" max="9999"></label>
+      <label>Relics <input id="run-relics" type="number" min="0" max="40"></label>
+    </div>
+    <div id="run"></div>
   </section>
 
   <section class="panel team" id="team-panel" hidden>
@@ -77,7 +89,7 @@
 </main>
 
 <footer>
-  <p><b>How to read it:</b> "+3.2%" means runs that picked this card in a deck like yours won 3.2 percentage points more often than runs that were offered it and skipped it, on the same branch, at Ascension 10, at a similar floor. Synergy is the part of that which comes from cards already in your deck. In co-op mode the numbers come from co-op runs and account for team size and your teammates' characters. Remove and upgrade advice compares choosing a card with choosing a different card from the same deck at the same shop, event or rest site. Cards marked <span class="pill low">low data</span> show an overall value without deck context.</p>
+  <p><b>How to read it:</b> "+3.2%" means runs that picked this card in a deck like yours won 3.2 percentage points more often than runs that were offered it and skipped it, on the same branch, at Ascension 10, at a similar floor. Synergy is the part of that which comes from cards already in your deck. In co-op mode the numbers come from co-op runs and account for team size and your teammates' characters. Remove and upgrade advice compares choosing a card with choosing a different card from the same deck at the same shop, event or rest site. Relic values compare taking a relic with passing on it; win chance is a rough estimate from your deck, HP, gold, relic count and floor. Cards marked <span class="pill low">low data</span> show an overall value without deck context.</p>
   <p>Run data from <a href="https://spire-codex.com" target="_blank" rel="noopener">Spire Codex</a> community exports (solo, unmodded runs). Card names, text and art © Mega Crit Games. Fan project, not affiliated with or endorsed by Mega Crit. Free, no ads.</p>
 </footer>
 <script src="app.js"></script>

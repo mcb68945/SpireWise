@@ -1,5 +1,8 @@
 "use strict";
-const BRANCHES = [{ id: "v0.107.1", label: "Live" }, { id: "v0.111.0", label: "Beta" }];
+// Keep in step with BRANCHES in app.js. `data` = folder to read when a version has no run data of its own yet.
+const BRANCHES = [{ id: "v0.107.1", label: "v0.107 · live" }, { id: "v0.111.0", label: "v0.111" },
+                  { id: "v0.113.0", data: "v0.111.0", label: "v0.113 · beta" }];
+const dataDir = () => (BRANCHES.find((b) => b.id === S.branch)?.data) || S.branch;
 const CHARS = ["ironclad", "silent", "defect", "regent", "necrobinder"];
 const $ = (s) => document.querySelector(s);
 const store = {
@@ -18,7 +21,7 @@ const value = (id) => D.models[id]?.value ?? D.simple[id]?.value ?? 0;
 const skip = (id) => !CARDS[id] || CARDS[id].rarity === "Basic" || ["curse", "status"].includes(CARDS[id].color);
 
 async function load() {
-  D = await (await fetch(`data/${S.branch}/${S.ch}.json`)).json();
+  D = await (await fetch(`data/${dataDir()}/${S.ch}.json`)).json();
   // Undirected pair weight: average of "pick A with B in deck" and "pick B with A in deck" where both exist.
   const acc = new Map();
   for (const [c, m] of Object.entries(D.models)) {
@@ -38,7 +41,7 @@ async function load() {
     BYCARD.get(me).push({ id: other, w: e.w });
   }
   const br = BRANCHES.find((b) => b.id === S.branch);
-  $("#meta").textContent = `${br.label} ${S.branch} · ${S.ch} · ${D.runs.toLocaleString()} A10 runs · ${PAIRS.length.toLocaleString()} card pairs with enough data`;
+  $("#meta").textContent = `${br.label}${br.data ? ` (using ${br.data} data)` : ""} · ${S.ch} · ${D.runs.toLocaleString()} A10 runs · ${PAIRS.length.toLocaleString()} card pairs with enough data`;
 }
 
 function controls() {

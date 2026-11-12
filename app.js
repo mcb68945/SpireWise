@@ -1,6 +1,10 @@
 "use strict";
-const BRANCHES = [{ id: "v0.107.1", label: "Live", note: "main branch v0.107.1" },
-                  { id: "v0.111.0", label: "Beta", note: "beta branch v0.111.0" }];
+// Game versions. `data` points a version without its own run data yet at the newest version that has it.
+// When a branch moves (e.g. beta becomes live), change only the labels here.
+const BRANCHES = [{ id: "v0.107.1", label: "v0.107 · live", note: "live branch v0.107.1" },
+                  { id: "v0.111.0", label: "v0.111", note: "v0.111.0, becomes live with the next update" },
+                  { id: "v0.113.0", data: "v0.111.0", label: "v0.113 · beta", note: "beta branch v0.113.0, using v0.111.0 data until enough v0.113 runs are available" }];
+const dataDir = () => (BRANCHES.find((b) => b.id === S.branch)?.data) || S.branch;
 const CHARS = ["ironclad", "silent", "defect", "regent", "necrobinder"];
 const MODES = [{ id: "solo", label: "Solo" }, { id: "coop", label: "Co-op" }];
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
@@ -24,27 +28,31 @@ const S = {
   mates: store.get("mates", ["silent"]),
   slots: ["", "", ""],
   fixTab: "remove",
+  runTab: store.get("runTab", "win"),
+  run: store.get("run", { hp: 60, mhp: 80, gold: 99, relics: 1 }),
+  relCtx: store.get("relCtx", "shop"),
+  relSlots: ["", "", ""],
   open: new Set(),
 };
 
 const deck = () => (S.decks[S.ch] ||= {});
-const save = () => { store.set("branch", S.branch); store.set("ch", S.ch); store.set("decks", S.decks); store.set("floor", S.floor); store.set("mode", S.mode); store.set("mates", S.mates); };
+const save = () => { store.set("branch", S.branch); store.set("ch", S.ch); store.set("decks", S.decks); store.set("floor", S.floor); store.set("mode", S.mode); store.set("mates", S.mates); store.set("runTab", S.runTab); store.set("run", S.run); store.set("relCtx", S.relCtx); };
 const name = (id) => CARDS[id]?.name || DATA[key()]?.names?.[id] || id.replace(/^CARD\./, "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 const img = (id) => (CARDS[id]?.img ? "img/cards/" + CARDS[id].img : "");
 const key = () => S.branch + "/" + S.ch + "/" + S.mode;
 const LINEUPS = {}, DEC = {};
 async function loadDecisions() {
-  const k = S.branch + "/" + S.ch;
-  if (!(k in DEC)) { try { DEC[k] = await (await fetch(`data/${S.branch}/${S.ch}.decisions.json`)).json(); } catch { DEC[k] = null; } }
+  const k = dataDir() + "/" + S.ch;
+  if (!(k in DEC)) { try { DEC[k] = await (await fetch(`data/${dataDir()}/${S.ch}.decisions.json`)).json(); } catch { DEC[k] = null; } }
   return DEC[k];
 }
 
 async function loadData() {
   const k = key();
   if (!DATA[k]) {
-    const solo = await (await fetch(`data/${S.branch}/${S.ch}.json`)).json();
+    const solo = await (await fetch(`data/${dataDir()}/${S.ch}.json`)).json();
     if (S.mode === "coop") {
-      const co = await (await fetch(`data/${S.branch}/${S.ch}.coop.json`)).json();
+      const co = await (await fetch(`data/${dataDir()}/${S.ch}.coop.json`)).json();
       // rare cards without a co-op model fall back to the solo estimate, flagged as low data
       const simple = { ...solo.simple };
       for (const [id, m] of Object.entries(solo.models)) if (!co.models[id]) simple[id] = { value: m.value, se: 0.03, picks: m.picks, skips: m.offers - m.picks };
@@ -52,7 +60,7 @@ async function loadData() {
       DATA[k] = { ...co, runs: co.seats, simple, names: { ...solo.names, ...co.names } };
     } else DATA[k] = solo;
   }
-  if (S.mode === "coop" && !LINEUPS[S.branch]) LINEUPS[S.branch] = await (await fetch(`data/${S.branch}/coop_lineups.json`)).json();
+  if (S.mode === "coop" && !LINEUPS[dataDir()]) LINEUPS[dataDir()] = await (await fetch(`data/${dataDir()}/coop_lineups.json`)).json();
   return DATA[k];
 }
 
@@ -87,18 +95,19 @@ function pool() {
   if (D) for (const id of [...Object.keys(D.models), ...Object.keys(D.simple)]) ids.add(id);
   return [...ids];
 }
-function autocomplete(input, list, onPick) {
+const CARD_SRC = { pool: () => pool(), name: (id) => name(id), img: (id) => img(id), sub: (id) => CARDS[id]?.color ?? "", own: (id) => (CARDS[id]?.color === S.ch ? 0 : 1) };
+function autocomplete(input, list, onPick, src = CARD_SRC) {
   let hl = 0, items = [];
   const close = () => list.classList.remove("open");
   const render = () => {
     const q = input.value.trim().toLowerCase();
     if (!q) return close();
-    const own = (id) => (CARDS[id]?.color === S.ch ? 0 : 1);
-    items = pool().filter((id) => name(id).toLowerCase().includes(q))
-      .sort((a, b) => own(a) - own(b) || (name(a).toLowerCase().startsWith(q) ? 0 : 1) - (name(b).toLowerCase().startsWith(q) ? 0 : 1) || name(a).localeCompare(name(b)))
+    const nm = src.name, own = src.own || (() => 0);
+    items = src.pool().filter((id) => nm(id).toLowerCase().includes(q))
+      .sort((a, b) => own(a) - own(b) || (nm(a).toLowerCase().startsWith(q) ? 0 : 1) - (nm(b).toLowerCase().startsWith(q) ? 0 : 1) || nm(a).localeCompare(nm(b)))
       .slice(0, 12);
     hl = 0;
-    list.innerHTML = items.map((id, i) => `<li data-i="${i}" class="${i === hl ? "hl" : ""}">${img(id) ? `<img src="${img(id)}" alt="">` : ""}<span>${name(id)}</span><span class="muted small">${CARDS[id]?.color ?? ""}</span></li>`).join("");
+    list.innerHTML = items.map((id, i) => `<li data-i="${i}" class="${i === hl ? "hl" : ""}">${src.img(id) ? `<img src="${src.img(id)}" alt="">` : ""}<span>${nm(id)}</span><span class="muted small">${src.sub(id)}</span></li>`).join("");
     list.classList.toggle("open", items.length > 0);
   };
   const pick = (i) => { if (items[i]) { onPick(items[i]); input.value = ""; close(); } };
@@ -125,8 +134,8 @@ function renderMates() {
 function renderTeam() {
   const panel = $("#team-panel");
   panel.hidden = S.mode !== "coop";
-  if (S.mode !== "coop" || !LINEUPS[S.branch]) return;
-  const n = Math.min(Math.max(S.mates.length + 1, 2), 4), L = LINEUPS[S.branch].lineups[String(n)];
+  if (S.mode !== "coop" || !LINEUPS[dataDir()]) return;
+  const n = Math.min(Math.max(S.mates.length + 1, 2), 4), L = LINEUPS[dataDir()].lineups[String(n)];
   const mine = [S.ch, ...S.mates].sort().join("+");
   const row = (l) => `<div class="team-row ${l.lineup.join("+") === mine ? "me" : ""}"><div class="lu">${l.lineup.map((c) => `<span class="chip" style="border-color:var(--${c})">${cap(c)}</span>`).join("")}</div>
       <span class="g ${l.vs_avg >= 0 ? "pos" : "neg"}">${(l.win_rate * 100).toFixed(1)}%</span><span class="muted small">${l.runs.toLocaleString()} runs</span></div>`;
@@ -246,6 +255,15 @@ async function renderFix() {
       <p class="muted small">For a ${n}-card deck with ${basics} Strikes/Defends at floor ${S.floor}. Bigger decks with more basics favour removing. Based on ${d.n.toLocaleString()} A10 visits (raw: remove ${(d.raw.remove_win * 100).toFixed(1)}% vs upgrade ${(d.raw.upgrade_win * 100).toFixed(1)}% win).</p>`;
     return;
   }
+  if (S.fixTab === "transform") {
+    const X = await loadExtra(), T = X?.transform || {};
+    const tr = (m) => { const b = bucketOf(S.floor), z0 = m.a + m.bucket[b] + m.k * n / 10 + m.kn; return sig(z0 + m.beta) - sig(z0); };
+    const rows = ids.filter((id) => T[id]).map((id) => ({ id, v: tr(T[id]) })).sort((a, b) => b.v - a.v);
+    el.innerHTML = rows.length ? `<h3>Best cards to transform</h3>${rows.map(row).join("")}
+      <p class="muted small">Change in win chance from transforming this card instead of another. Players almost only transform starter cards, so only those have enough data.</p>`
+      : `<p class="muted small">None of your cards have enough transform data (mostly only starter cards do).</p>`;
+    return;
+  }
   const models = S.fixTab === "remove" ? D.removal : D.upgrade;
   const rows = ids.filter((id) => models[id]).map((id) => ({ id, v: decisionScore(models[id], set, n, S.floor, S.fixTab === "remove" ? models[id].kn + models[id].shop : 0) }))
     .sort((a, b) => b.v - a.v);
@@ -255,9 +273,75 @@ async function renderFix() {
       <p class="muted small">Change in win chance from ${S.fixTab === "remove" ? "removing" : "upgrading"} this card instead of another card in your deck.${missing ? ` ${missing} card${missing > 1 ? "s" : ""} in your deck ${missing > 1 ? "are" : "is"} rarely ${S.fixTab === "remove" ? "removed" : "upgraded"}, so not scored.` : ""}</p>`
     : `<p class="muted small">None of your cards have enough ${S.fixTab === "remove" ? "removal" : "upgrade"} data.</p>`;
 }
+
+// ---------- run: win chance, relics, rest sites (same math as the in-game mod) ----------
+const EX = {};
+async function loadExtra() {
+  const k = dataDir() + "/" + S.ch;
+  if (!(k in EX)) { try { EX[k] = await (await fetch(`data/${dataDir()}/${S.ch}.extra.json`)).json(); } catch { EX[k] = null; } }
+  return EX[k];
+}
+const relicName = (id) => id.replace(/^RELIC\./, "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+const bucketOf = (floor) => Math.min(Math.floor((Math.max(1, floor) - 1) / 9), 5);
+const deckInfo = () => { const dk = deck(), ids = Object.keys(dk); return { set: new Set(ids), n: ids.reduce((s, c) => s + dk[c], 0) }; };
+const REL_CTX = { shop: { label: "Shop", offered: 3 }, ancient: { label: "Ancient", offered: 3 }, other: { label: "Event / other", offered: 2 } };
+function relicValue(m, n, floor, ctx) {
+  const z0 = m.a + m.bucket[bucketOf(floor)] + m.k * n / 10 + (ctx === "shop" ? m.shop : 0) + (ctx === "ancient" ? m.ancient : 0) + m.kn * REL_CTX[ctx].offered;
+  return sig(z0 + m.beta) - sig(z0);
+}
+function winChance(w, set, n, r, floor) {
+  if (!w || !(r.mhp > 0)) return null;
+  let z = w.a + w.hp * Math.min(1, Math.max(0, r.hp / r.mhp)) + w.mhp * r.mhp / 100 + w.gold * r.gold / 100 + w.relics * r.relics + w.k * n / 10 + w.fl * floor / 10 + w.bucket[bucketOf(floor)];
+  for (const c of set) if (w.deck[c]) z += w.deck[c];
+  return sig(z);
+}
+async function renderRun() {
+  const X = await loadExtra(), el = $("#run");
+  [...document.querySelectorAll("#run-tab button")].forEach((b) => b.classList.toggle("on", b.dataset.t === S.runTab));
+  for (const k of ["hp", "mhp", "gold", "relics"]) { const i = $("#run-" + k); if (document.activeElement !== i) i.value = S.run[k]; }
+  $("#run-stats").hidden = S.runTab === "relics";
+  if (!X) { el.innerHTML = `<p class="muted small">No run data for this branch and character.</p>`; return; }
+  const { set, n } = deckInfo();
+  if (S.runTab === "win") {
+    const p = winChance(X.win, set, n, S.run, S.floor);
+    el.innerHTML = p == null ? `<p class="muted small">Enter your max HP.</p>` : `<div class="win-big">${(p * 100).toFixed(0)}%</div>
+      <p class="muted small">Estimated chance this run wins at A10, from your deck, HP, max HP, gold, relic count and floor ${S.floor}.
+      A rough guide: the model ranks a winning run above a losing one ${(X.win.auc * 100).toFixed(0)}% of the time (${X.win.n.toLocaleString()} run snapshots). It can't see your relics' names, potions or the next fights.</p>`;
+    return;
+  }
+  if (S.runTab === "rest") {
+    const act = S.floor <= 17 ? 0 : S.floor <= 34 ? 1 : 2, hb = Math.min(9, Math.max(0, Math.floor(S.run.hp * 10 / Math.max(1, S.run.mhp))));
+    const share = X.rest.winners_smith[act][hb], cnt = X.rest.n[act][hb];
+    const cells = X.rest.winners_smith[act].map((v, i) => `<div class="rest-cell ${i === hb ? "on" : ""}" title="${i * 10}-${i * 10 + 9}% HP: ${(v * 100).toFixed(0)}% smithed (${X.rest.n[act][i]} rests)"><span style="height:${Math.round(v * 100)}%"></span><em>${i * 10}</em></div>`).join("");
+    el.innerHTML = `<div class="verdict ${share >= 0.5 ? "pos" : "neg"}">${cnt >= 30 ? `Winners smithed ${(share * 100).toFixed(0)}%` : "Too few rests at this HP"} <span class="small">at ${hb * 10}-${hb * 10 + 9}% HP in Act ${act + 1}${cnt >= 30 ? ` (${cnt.toLocaleString()} rests)` : ""}</span></div>
+      <div class="rest-chart">${cells}</div><p class="muted small">Share of winning A10 runs that chose Smith over Rest, by HP (%) in Act ${act + 1}.
+      This shows what winners did, not a verdict: players only Smith at low HP when they know they're safe, which the data can't see.</p>`;
+    return;
+  }
+  // relics
+  const ids = Object.keys(X.relic);
+  const ctxBtns = Object.entries(REL_CTX).map(([k, v]) => `<button data-ctx="${k}" class="${S.relCtx === k ? "on" : ""}">${v.label}</button>`).join("");
+  const offered = S.relSlots.filter((id) => id && X.relic[id]).map((id) => ({ id, v: relicValue(X.relic[id], n, S.floor, S.relCtx) }));
+  const best = offered.length > 1 ? offered.reduce((a, b) => (b.v > a.v ? b : a)).id : null;
+  const all = ids.map((id) => ({ id, v: relicValue(X.relic[id], n, S.floor, S.relCtx) })).sort((a, b) => b.v - a.v);
+  const row = (r) => `<div class="fix-row rel ${r.id === best ? "top" : ""}"><span></span><span>${relicName(r.id)}</span><span class="g ${r.v >= 0 ? "pos" : "neg"}">${pct(r.v)}</span></div>`;
+  el.innerHTML = `<div class="seg small-seg" id="rel-ctx">${ctxBtns}</div>
+    <div class="slots rel-slots">${S.relSlots.map((v, i) => `<div class="slot search"><input data-rs="${i}" placeholder="Relic ${i + 1}…" value="${v ? relicName(v) : ""}" autocomplete="off"><ul class="suggest" data-rsl="${i}"></ul></div>`).join("")}</div>
+    ${offered.length ? `<h3>Your choice</h3>${offered.map(row).join("")}` : ""}
+    <h3>Best ${REL_CTX[S.relCtx].label.toLowerCase()} relics at floor ${S.floor}</h3>${all.slice(0, 6).map(row).join("")}
+    <h3>Worst</h3>${all.slice(-3).reverse().map(row).join("")}
+    <p class="muted small">Change in win chance from taking the relic instead of passing on it, from ${ids.length} relics offered in A10 shops, Ancient choices and events.
+    Treat these as a ranking: the sizes are probably exaggerated, because players take strong relics when their run is already going well.</p>`;
+  const src = { pool: () => ids, name: relicName, img: () => "", sub: () => "" };
+  el.querySelectorAll("[data-rs]").forEach((inp) => {
+    const i = +inp.dataset.rs;
+    autocomplete(inp, el.querySelector(`[data-rsl="${i}"]`), (id) => { S.relSlots[i] = id; renderRun(); }, src);
+    inp.addEventListener("change", () => { if (!inp.value.trim()) { S.relSlots[i] = ""; renderRun(); } });
+  });
+}
 async function renderAll() {
   renderControls(); renderMates(); renderDeck(); renderSlots();
-  await loadData(); renderRank(); renderReward(); renderTeam(); renderFix(); save();
+  await loadData(); renderRank(); renderReward(); renderTeam(); renderFix(); renderRun(); save();
 }
 
 // ---------- events ----------
@@ -270,18 +354,21 @@ function wire() {
     renderMates(); renderRank(); renderReward(); renderTeam(); save();
   });
   $("#branch").addEventListener("click", (e) => { const b = e.target.dataset.b; if (b) { S.branch = b; renderAll(); } });
-  $("#chars").addEventListener("click", (e) => { const c = e.target.dataset.c; if (c) { S.ch = c; S.slots = ["", "", ""]; renderAll(); } });
-  autocomplete($("#deck-search"), $("#deck-suggest"), (id) => { deck()[id] = (deck()[id] || 0) + 1; renderDeck(); renderRank(); renderReward(); renderFix(); save(); });
+  $("#chars").addEventListener("click", (e) => { const c = e.target.dataset.c; if (c) { S.ch = c; S.slots = ["", "", ""]; S.relSlots = ["", "", ""]; renderAll(); } });
+  autocomplete($("#deck-search"), $("#deck-suggest"), (id) => { deck()[id] = (deck()[id] || 0) + 1; renderDeck(); renderRank(); renderReward(); renderFix(); renderRun(); save(); });
   $("#deck-list").addEventListener("click", (e) => {
     const a = e.target.dataset.add, r = e.target.dataset.rm, dk = deck();
     if (a) dk[a]++;
     if (r && --dk[r] <= 0) delete dk[r];
-    if (a || r) { renderDeck(); renderRank(); renderReward(); renderFix(); save(); }
+    if (a || r) { renderDeck(); renderRank(); renderReward(); renderFix(); renderRun(); save(); }
   });
-  $("#starter").addEventListener("click", () => { S.decks[S.ch] = { ...(STARTERS[S.ch] || {}) }; S.floor = 1; renderDeck(); renderRank(); renderReward(); renderFix(); save(); });
-  $("#clear").addEventListener("click", () => { S.decks[S.ch] = {}; renderDeck(); renderRank(); renderReward(); renderFix(); save(); });
-  $("#floor").addEventListener("input", (e) => { S.floor = Math.max(1, +e.target.value || 1); renderRank(); renderReward(); renderFix(); save(); });
+  $("#starter").addEventListener("click", () => { S.decks[S.ch] = { ...(STARTERS[S.ch] || {}) }; S.floor = 1; renderDeck(); renderRank(); renderReward(); renderFix(); renderRun(); save(); });
+  $("#clear").addEventListener("click", () => { S.decks[S.ch] = {}; renderDeck(); renderRank(); renderReward(); renderFix(); renderRun(); save(); });
+  $("#floor").addEventListener("input", (e) => { S.floor = Math.max(1, +e.target.value || 1); renderRank(); renderReward(); renderFix(); renderRun(); save(); });
   $("#fix-tab").addEventListener("click", (e) => { if (e.target.dataset.t) { S.fixTab = e.target.dataset.t; renderFix(); } });
+  $("#run-tab").addEventListener("click", (e) => { if (e.target.dataset.t) { S.runTab = e.target.dataset.t; renderRun(); save(); } });
+  for (const k of ["hp", "mhp", "gold", "relics"]) $("#run-" + k).addEventListener("input", (e) => { S.run[k] = Math.max(0, +e.target.value || 0); renderRun(); save(); });
+  $("#run").addEventListener("click", (e) => { const c = e.target.dataset.ctx; if (c) { S.relCtx = c; renderRun(); save(); } });
   $("#filter").addEventListener("input", renderRank);
   $("#show-low").addEventListener("change", renderRank);
   $("#rank").addEventListener("click", (e) => {
