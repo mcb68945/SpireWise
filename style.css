@@ -96,3 +96,9 @@ footer{padding:8px 24px 30px;color:var(--muted);font-size:13px;max-width:1000px}
 
 nav.links a{color:var(--muted);text-decoration:none;margin-left:14px}
 nav.links a.on,nav.links a:hover{color:var(--gold)}
+
+.fix-row{display:grid;grid-template-columns:28px 1fr 64px;gap:8px;align-items:center;padding:4px 6px;border-radius:8px;font-size:14px}
+.fix-row img{width:28px;height:38px;object-fit:cover;border-radius:3px}
+.fix-row.top{background:var(--panel2);outline:1px solid var(--gold)}
+.fix h3{font:600 14px Georgia,serif;margin:10px 0 4px;color:var(--gold)}
+.verdict{font-size:18px;font-weight:700;margin:6px 0}

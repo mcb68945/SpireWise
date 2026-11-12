@@ -23,6 +23,7 @@ const S = {
   mode: store.get("mode", "solo"),
   mates: store.get("mates", ["silent"]),
   slots: ["", "", ""],
+  fixTab: "remove",
   open: new Set(),
 };
 
@@ -31,7 +32,12 @@ const save = () => { store.set("branch", S.branch); store.set("ch", S.ch); store
 const name = (id) => CARDS[id]?.name || DATA[key()]?.names?.[id] || id.replace(/^CARD\./, "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 const img = (id) => (CARDS[id]?.img ? "img/cards/" + CARDS[id].img : "");
 const key = () => S.branch + "/" + S.ch + "/" + S.mode;
-const LINEUPS = {};
+const LINEUPS = {}, DEC = {};
+async function loadDecisions() {
+  const k = S.branch + "/" + S.ch;
+  if (!(k in DEC)) { try { DEC[k] = await (await fetch(`data/${S.branch}/${S.ch}.decisions.json`)).json(); } catch { DEC[k] = null; } }
+  return DEC[k];
+}
 
 async function loadData() {
   const k = key();
@@ -214,9 +220,44 @@ function renderSlots() {
     inp.addEventListener("focus", () => inp.select());
   });
 }
+// Remove / upgrade advice for the current deck: value of choosing each card instead of another card at the same decision.
+function decisionScore(m, deckSet, n, floor, extra = 0) {
+  const b = Math.min(Math.floor((Math.max(1, floor) - 1) / 9), 5);
+  let z0 = m.a + m.bucket[b] + m.k * n / 10 + extra;
+  for (const p of deckSet) if (m.delta[p]) z0 += m.delta[p];
+  return sig(z0 + m.beta) - sig(z0);
+}
+async function renderFix() {
+  const D = await loadDecisions(), el = $("#fix");
+  [...document.querySelectorAll("#fix-tab button")].forEach((b) => b.classList.toggle("on", b.dataset.t === S.fixTab));
+  if (!D) { el.innerHTML = `<p class="muted small">No removal/upgrade data for this branch.</p>`; return; }
+  const dk = deck(), ids = Object.keys(dk), n = ids.reduce((s, c) => s + dk[c], 0), set = new Set(ids);
+  if (!ids.length) { el.innerHTML = `<p class="muted small">Add your deck above first.</p>`; return; }
+  const row = (r, i) => `<div class="fix-row ${i === 0 ? "top" : ""}">${img(r.id) ? `<img src="${img(r.id)}" alt="">` : "<span></span>"}<span>${name(r.id)}${dk[r.id] > 1 ? ` <span class="muted small">×${dk[r.id]}</span>` : ""}</span><span class="g ${r.v >= 0 ? "pos" : "neg"}">${pct(r.v)}</span></div>`;
+  if (S.fixTab === "doors") {
+    const d = D.doors; if (!d) { el.innerHTML = `<p class="muted small">Not enough Doors of Light and Dark visits for this character.</p>`; return; }
+    const basics = ids.filter((id) => /CARD\.(STRIKE|DEFEND)_/.test(id)).reduce((s, id) => s + dk[id], 0);
+    const b = Math.min(Math.floor((Math.max(1, S.floor) - 1) / 9), 5);
+    const z = d.a + d.bucket[b] + d.k * n / 10 + d.kb * basics;
+    const diff = d.r + d.r_n * n / 10 + d.r_b * basics + d.r_f * S.floor / 10;
+    const g = sig(z + diff) - sig(z);
+    el.innerHTML = `<p class="muted small">Doors of Light and Dark: remove 1 card, or upgrade 2.</p>
+      <div class="verdict ${g >= 0 ? "pos" : "neg"}">${g >= 0 ? "Remove a card" : "Take the upgrades"} <span class="small">(${pct(Math.abs(g))} win chance)</span></div>
+      <p class="muted small">For a ${n}-card deck with ${basics} Strikes/Defends at floor ${S.floor}. Bigger decks with more basics favour removing. Based on ${d.n.toLocaleString()} A10 visits (raw: remove ${(d.raw.remove_win * 100).toFixed(1)}% vs upgrade ${(d.raw.upgrade_win * 100).toFixed(1)}% win).</p>`;
+    return;
+  }
+  const models = S.fixTab === "remove" ? D.removal : D.upgrade;
+  const rows = ids.filter((id) => models[id]).map((id) => ({ id, v: decisionScore(models[id], set, n, S.floor, S.fixTab === "remove" ? models[id].kn + models[id].shop : 0) }))
+    .sort((a, b) => b.v - a.v);
+  const missing = ids.filter((id) => !models[id]).length;
+  el.innerHTML = rows.length ? `<h3>${S.fixTab === "remove" ? "Best cards to remove" : "Best cards to upgrade"}</h3>${rows.slice(0, 6).map(row).join("")}
+      ${rows.length > 6 ? `<h3>${S.fixTab === "remove" ? "Keep these" : "Least worth upgrading"}</h3>${rows.slice(-3).reverse().map((r) => row(r, 9)).join("")}` : ""}
+      <p class="muted small">Change in win chance from ${S.fixTab === "remove" ? "removing" : "upgrading"} this card instead of another card in your deck.${missing ? ` ${missing} card${missing > 1 ? "s" : ""} in your deck ${missing > 1 ? "are" : "is"} rarely ${S.fixTab === "remove" ? "removed" : "upgraded"}, so not scored.` : ""}</p>`
+    : `<p class="muted small">None of your cards have enough ${S.fixTab === "remove" ? "removal" : "upgrade"} data.</p>`;
+}
 async function renderAll() {
   renderControls(); renderMates(); renderDeck(); renderSlots();
-  await loadData(); renderRank(); renderReward(); renderTeam(); save();
+  await loadData(); renderRank(); renderReward(); renderTeam(); renderFix(); save();
 }
 
 // ---------- events ----------
@@ -230,16 +271,17 @@ function wire() {
   });
   $("#branch").addEventListener("click", (e) => { const b = e.target.dataset.b; if (b) { S.branch = b; renderAll(); } });
   $("#chars").addEventListener("click", (e) => { const c = e.target.dataset.c; if (c) { S.ch = c; S.slots = ["", "", ""]; renderAll(); } });
-  autocomplete($("#deck-search"), $("#deck-suggest"), (id) => { deck()[id] = (deck()[id] || 0) + 1; renderDeck(); renderRank(); renderReward(); save(); });
+  autocomplete($("#deck-search"), $("#deck-suggest"), (id) => { deck()[id] = (deck()[id] || 0) + 1; renderDeck(); renderRank(); renderReward(); renderFix(); save(); });
   $("#deck-list").addEventListener("click", (e) => {
     const a = e.target.dataset.add, r = e.target.dataset.rm, dk = deck();
     if (a) dk[a]++;
     if (r && --dk[r] <= 0) delete dk[r];
-    if (a || r) { renderDeck(); renderRank(); renderReward(); save(); }
+    if (a || r) { renderDeck(); renderRank(); renderReward(); renderFix(); save(); }
   });
-  $("#starter").addEventListener("click", () => { S.decks[S.ch] = { ...(STARTERS[S.ch] || {}) }; S.floor = 1; renderDeck(); renderRank(); renderReward(); save(); });
-  $("#clear").addEventListener("click", () => { S.decks[S.ch] = {}; renderDeck(); renderRank(); renderReward(); save(); });
-  $("#floor").addEventListener("input", (e) => { S.floor = Math.max(1, +e.target.value || 1); renderRank(); renderReward(); save(); });
+  $("#starter").addEventListener("click", () => { S.decks[S.ch] = { ...(STARTERS[S.ch] || {}) }; S.floor = 1; renderDeck(); renderRank(); renderReward(); renderFix(); save(); });
+  $("#clear").addEventListener("click", () => { S.decks[S.ch] = {}; renderDeck(); renderRank(); renderReward(); renderFix(); save(); });
+  $("#floor").addEventListener("input", (e) => { S.floor = Math.max(1, +e.target.value || 1); renderRank(); renderReward(); renderFix(); save(); });
+  $("#fix-tab").addEventListener("click", (e) => { if (e.target.dataset.t) { S.fixTab = e.target.dataset.t; renderFix(); } });
   $("#filter").addEventListener("input", renderRank);
   $("#show-low").addEventListener("change", renderRank);
   $("#rank").addEventListener("click", (e) => {
