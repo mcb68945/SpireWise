@@ -8,8 +8,8 @@ const sig = (z) => 1 / (1 + Math.exp(-z));
 const pct = (x, d = 1) => (x >= 0 ? "+" : "−") + Math.abs(x * 100).toFixed(d) + "%";
 
 const store = {
-  get(k, d) { try { const v = localStorage.getItem("spirepick." + k); return v ? JSON.parse(v) : d; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem("spirepick." + k, JSON.stringify(v)); } catch {} },
+  get(k, d) { try { const v = localStorage.getItem("spirewise." + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("spirewise." + k, JSON.stringify(v)); } catch {} },
 };
 
 let CARDS = {}, STARTERS = {}, DATA = {};
