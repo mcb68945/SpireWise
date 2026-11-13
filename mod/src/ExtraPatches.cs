@@ -40,8 +40,10 @@ public static class ExtraPatches
         if (card == null || ctx == null) return;
         var s = CardScorer.Score(ctx, card.Id.ToString());
         if (!s.Known) { slot.GetNodeOrNull(Badges.NodeName)?.QueueFree(); return; }
-        Badges.Attach(slot, Badges.Pct(s.Gain) + " win" + (s.LowData ? " (low data)" : ""), s.Gain >= 0 ? Badges.Good : Badges.Bad,
+        var badge = Badges.Attach(slot, Badges.Pct(s.Gain) + " win" + (s.LowData ? " (low data)" : ""), s.Gain >= 0 ? Badges.Good : Badges.Bad,
             highlight: false, y: 120, fontSize: 20, width: 170);
+        // The fixed offset sat on the card text. Move it just below the price, like relics.
+        Callable.From(() => PlaceBelowCost(slot, badge)).CallDeferred();
     }
 
     public static void ShopRelicPostfix(object __instance)
@@ -76,7 +78,7 @@ public static class ExtraPatches
             var size = badge.GetGlobalRect().Size;
             badge.GlobalPosition = new Vector2(price.GetCenter().X - size.X / 2, price.End.Y + 6);
         }
-        catch (Exception e) { Plugin.LogError($"shop relic label placement failed: {e.Message}"); }
+        catch (Exception e) { Plugin.LogError($"shop label placement failed: {e.Message}"); }
     }
 
     // ---------------- #2 rest site: what winning players did ----------------
