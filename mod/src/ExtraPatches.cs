@@ -108,6 +108,40 @@ public static class ExtraPatches
     {
         Settings.StartHotkey();
         if (Settings.ShowAncients) Safe("ancient", () => AncientOptions(__instance));
+        if (Settings.ShowRemoveUpgrade) Safe("doors", () => DoorsOptions(__instance));
+    }
+
+    // Doors of Light and Dark: label Light (upgrade) and Dark (remove) with how they compare.
+    private static void DoorsOptions(object instance)
+    {
+        var button = (NEventOptionButton)instance;
+        string key = button.Option?.TextKey ?? "";
+        if (!key.StartsWith("DOORS_OF_LIGHT_AND_DARK.") || button.GetParent() == null) return;
+        var ctx = RunContext.Current();
+        if (ctx == null) return;
+        // The data describes v0.111's event (Light = 2 random upgrades). v0.113 changed Light to "pick 1 card to
+        // upgrade", so only show numbers when the data is for the game version being played.
+        if (ctx.GameVersion != ctx.DataVersion)
+        {
+            Plugin.Log($"doors: no data for this version of the event (game {ctx.GameVersion}, data {ctx.DataVersion})");
+            return;
+        }
+        var d = DecisionStore.Get(ctx.DataVersion, ctx.CharKey)?.Doors;
+        if (d == null) return;
+        int basics = ctx.DeckIds.Count(id => id.StartsWith("CARD.STRIKE_") || id.StartsWith("CARD.DEFEND_"));
+        double g = d.RemoveMinusUpgrade(ctx.DeckIds.Count, basics, ctx.Floor);   // > 0: Dark (remove) is better
+        foreach (var b in button.GetParent().GetChildren().OfType<NEventOptionButton>())
+        {
+            string k = b.Option?.TextKey ?? "";
+            bool dark = k.EndsWith(".DARK"), light = k.EndsWith(".LIGHT");
+            if (!dark && !light) continue;
+            double v = dark ? g : -g;   // each option vs the other one
+            var badge = Badges.Attach(b, (v >= 0 ? "better " : "") + Badges.Pct(v) + " win", v >= 0 ? Badges.Good : Badges.Bad,
+                highlight: v > 0, y: 0, fontSize: 20, width: 170);
+            var target = b;
+            Callable.From(() => { if (GodotObject.IsInstanceValid(badge)) badge.Position = new Vector2(-180, Math.Max(0, target.Size.Y / 2 - 18)); }).CallDeferred();
+        }
+        Plugin.Log($"doors: {ctx.CharKey} floor {ctx.Floor}, deck {ctx.DeckIds.Count} ({basics} basics): remove vs upgrade {g * 100:+0.0;-0.0}%");
     }
 
     private static void AncientOptions(object instance)

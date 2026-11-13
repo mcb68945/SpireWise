@@ -136,6 +136,30 @@ public sealed class DecisionData
 {
     [JsonPropertyName("removal")] public Dictionary<string, DecisionModel> Removal { get; set; } = new();
     [JsonPropertyName("upgrade")] public Dictionary<string, DecisionModel> Upgrade { get; set; } = new();
+    [JsonPropertyName("doors")] public DoorsModel? Doors { get; set; }
+}
+
+/// <summary>Doors of Light and Dark: remove 1 card (Dark) vs upgrade 2 random cards (Light, game v0.111 rules).</summary>
+public sealed class DoorsModel
+{
+    [JsonPropertyName("n")] public int N { get; set; }
+    [JsonPropertyName("a")] public double A { get; set; }
+    [JsonPropertyName("k")] public double K { get; set; }
+    [JsonPropertyName("kb")] public double Kb { get; set; }
+    [JsonPropertyName("r")] public double R { get; set; }
+    [JsonPropertyName("r_n")] public double RN { get; set; }
+    [JsonPropertyName("r_b")] public double RB { get; set; }
+    [JsonPropertyName("r_f")] public double RF { get; set; }
+    [JsonPropertyName("bucket")] public double[] Bucket { get; set; } = new double[6];
+
+    /// <summary>Win-chance gain from removing (Dark) instead of upgrading (Light). Same formula as the site.</summary>
+    public double RemoveMinusUpgrade(int deckSize, int basics, int floor)
+    {
+        int b = Math.Min((Math.Max(1, floor) - 1) / 9, 5);
+        double z = A + Bucket[b] + K * deckSize / 10.0 + Kb * basics;
+        double diff = R + RN * deckSize / 10.0 + RB * basics + RF * floor / 10.0;
+        return 1 / (1 + Math.Exp(-(z + diff))) - 1 / (1 + Math.Exp(-z));
+    }
 }
 
 public static class DecisionStore

@@ -244,6 +244,7 @@ async function renderFix() {
   if (!ids.length) { el.innerHTML = `<p class="muted small">Add your deck above first.</p>`; return; }
   const row = (r, i) => `<div class="fix-row ${i === 0 ? "top" : ""}">${img(r.id) ? `<img src="${img(r.id)}" alt="">` : "<span></span>"}<span>${name(r.id)}${dk[r.id] > 1 ? ` <span class="muted small">×${dk[r.id]}</span>` : ""}</span><span class="g ${r.v >= 0 ? "pos" : "neg"}">${pct(r.v)}</span></div>`;
   if (S.fixTab === "doors") {
+    if (dataDir() !== S.branch) { el.innerHTML = `<p class="muted small">Doors of Light and Dark changed in ${S.branch}: Light now lets you pick 1 card to upgrade (it used to upgrade 2 at random). The data here is for the old version, so there's no advice for this event until ${S.branch} runs are available.</p>`; return; }
     const d = D.doors; if (!d) { el.innerHTML = `<p class="muted small">Not enough Doors of Light and Dark visits for this character.</p>`; return; }
     const basics = ids.filter((id) => /CARD\.(STRIKE|DEFEND)_/.test(id)).reduce((s, id) => s + dk[id], 0);
     const b = Math.min(Math.floor((Math.max(1, S.floor) - 1) / 9), 5);
