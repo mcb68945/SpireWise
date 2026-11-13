@@ -121,29 +121,45 @@ public static class ExtraPatches
         if (!key.StartsWith("DOORS_OF_LIGHT_AND_DARK.") || button.GetParent() == null) return;
         var ctx = RunContext.Current();
         if (ctx == null) return;
-        // The data describes v0.111's event (Light = 2 random upgrades). v0.113 changed Light to "pick 1 card to
-        // upgrade", so only show numbers when the data is for the game version being played.
-        if (ctx.GameVersion != ctx.DataVersion)
+        double g;   // > 0: Dark (remove) is better than Light (upgrade)
+        double? dark = null, light = null;
+        if (ctx.GameVersion == ctx.DataVersion)
         {
-            Plugin.Log($"doors: no data for this version of the event (game {ctx.GameVersion}, data {ctx.DataVersion})");
-            return;
+            // Same event as the data: v0.111's Light door upgrades 2 random cards, fitted directly.
+            var d = DecisionStore.Get(ctx.DataVersion, ctx.CharKey)?.Doors;
+            if (d == null) return;
+            int basics = ctx.DeckIds.Count(id => id.StartsWith("CARD.STRIKE_") || id.StartsWith("CARD.DEFEND_"));
+            g = d.RemoveMinusUpgrade(ctx.DeckIds.Count, basics, ctx.Floor);
         }
-        var d = DecisionStore.Get(ctx.DataVersion, ctx.CharKey)?.Doors;
-        if (d == null) return;
-        int basics = ctx.DeckIds.Count(id => id.StartsWith("CARD.STRIKE_") || id.StartsWith("CARD.DEFEND_"));
-        double g = d.RemoveMinusUpgrade(ctx.DeckIds.Count, basics, ctx.Floor);   // > 0: Dark (remove) is better
+        else
+        {
+            // v0.113 changed Light to "pick 1 card to upgrade", so it is the same choice as the remove/upgrade
+            // screens: compare your best removal with your best upgrade, each scored per card.
+            var data = DecisionStore.Get(ctx.DataVersion, ctx.CharKey);
+            if (data == null) return;
+            double? Best(bool removal) => ctx.DeckSet
+                .Select(id => DecisionStore.Evaluate((removal ? data.Removal : data.Upgrade).GetValueOrDefault(id), ctx.DeckSet, ctx.DeckIds.Count, ctx.Floor, removal))
+                .Where(v => v.HasValue).Select(v => v!.Value).DefaultIfEmpty(double.NaN).Max() is var m && !double.IsNaN(m) ? m : null;
+            dark = Best(true); light = Best(false);
+            if (dark == null || light == null) return;
+            g = dark.Value - light.Value;
+        }
         foreach (var b in button.GetParent().GetChildren().OfType<NEventOptionButton>())
         {
             string k = b.Option?.TextKey ?? "";
-            bool dark = k.EndsWith(".DARK"), light = k.EndsWith(".LIGHT");
-            if (!dark && !light) continue;
-            double v = dark ? g : -g;   // each option vs the other one
+            bool isDark = k.EndsWith(".DARK"), isLight = k.EndsWith(".LIGHT");
+            if (!isDark && !isLight) continue;
+            // v0.111: each door vs the other. v0.113: each door's own value (your best removal / best upgrade),
+            // matching the numbers on the remove and upgrade screens; the better door gets the gold border.
+            double v = dark.HasValue ? (isDark ? dark.Value : light!.Value) : (isDark ? g : -g);
+            bool better = isDark ? g > 0 : g < 0;
             var badge = Badges.Attach(b, Badges.Pct(v), Badges.Tone(v),
-                highlight: v > 0, y: 0, fontSize: 20, width: 96);
+                highlight: better && v > 0, y: 0, fontSize: 20, width: 96);
             var target = b;
             Callable.From(() => { if (GodotObject.IsInstanceValid(badge)) badge.Position = new Vector2(target.Size.X - badge.Size.X - 16, Math.Max(0, (target.Size.Y - badge.Size.Y) / 2)); }).CallDeferred();
         }
-        Plugin.Log($"doors: {ctx.CharKey} floor {ctx.Floor}, deck {ctx.DeckIds.Count} ({basics} basics): remove vs upgrade {g * 100:+0.0;-0.0}%");
+        Plugin.Log($"doors: {ctx.CharKey} floor {ctx.Floor}, deck {ctx.DeckIds.Count}: remove vs upgrade {g * 100:+0.0;-0.0}%" +
+                   (dark.HasValue ? $" (best remove {dark.Value * 100:+0.0;-0.0}%, best upgrade {light!.Value * 100:+0.0;-0.0}%)" : ""));
     }
 
     private static void AncientOptions(object instance)
