@@ -40,7 +40,7 @@ public static class ExtraPatches
         if (card == null || ctx == null) return;
         var s = CardScorer.Score(ctx, card.Id.ToString());
         if (!s.Known) { slot.GetNodeOrNull(Badges.NodeName)?.QueueFree(); return; }
-        var badge = Badges.Attach(slot, Badges.Pct(s.Gain) + " win" + (s.LowData ? " (low data)" : ""), s.Gain >= 0 ? Badges.Good : Badges.Bad,
+        var badge = Badges.Attach(slot, Badges.Pct(s.Gain) + " win" + (s.LowData ? " (low data)" : ""), Badges.Tone(s.Gain),
             highlight: false, y: 120, fontSize: 20, width: 170);
         // The fixed offset sat on the card text. Move it just below the price, like relics.
         Callable.From(() => PlaceBelowCost(slot, badge)).CallDeferred();
@@ -61,7 +61,7 @@ public static class ExtraPatches
         if (ctx == null || ex == null) return;
         var v = ExtraStore.Relic(ex.Relic.GetValueOrDefault(entry.Model.Id.ToString()), ctx.DeckIds.Count, ctx.Floor, shop: true, ancient: false, offered: 3);
         if (v == null) { slot.GetNodeOrNull(Badges.NodeName)?.QueueFree(); return; }
-        var badge = Badges.Attach(slot, Badges.Pct(v.Value) + " win", v.Value >= 0 ? Badges.Good : Badges.Bad, highlight: false, y: 70, fontSize: 20, width: 150);
+        var badge = Badges.Attach(slot, Badges.Pct(v.Value) + " win", Badges.Tone(v.Value), highlight: false, y: 70, fontSize: 20, width: 150);
         // A fixed offset landed on the price tag. Once the shop has laid out, move the label just below the price.
         Callable.From(() => PlaceBelowCost(slot, badge)).CallDeferred();
     }
@@ -138,7 +138,7 @@ public static class ExtraPatches
             bool dark = k.EndsWith(".DARK"), light = k.EndsWith(".LIGHT");
             if (!dark && !light) continue;
             double v = dark ? g : -g;   // each option vs the other one
-            var badge = Badges.Attach(b, Badges.Pct(v), v >= 0 ? Badges.Good : Badges.Bad,
+            var badge = Badges.Attach(b, Badges.Pct(v), Badges.Tone(v),
                 highlight: v > 0, y: 0, fontSize: 20, width: 96);
             var target = b;
             Callable.From(() => { if (GodotObject.IsInstanceValid(badge)) badge.Position = new Vector2(target.Size.X - badge.Size.X - 16, Math.Max(0, (target.Size.Y - badge.Size.Y) / 2)); }).CallDeferred();
@@ -161,7 +161,7 @@ public static class ExtraPatches
         foreach (var (b, v) in scores)
         {
             if (v == null) { b.GetNodeOrNull(Badges.NodeName)?.QueueFree(); continue; }
-            var badge = Badges.Attach(b, Badges.Pct(v.Value), v.Value >= 0 ? Badges.Good : Badges.Bad,
+            var badge = Badges.Attach(b, Badges.Pct(v.Value), Badges.Tone(v.Value),
                 highlight: v.Value == best && best > 0, y: 0, fontSize: 20, width: 96);
             var target = b;
             Callable.From(() => { if (GodotObject.IsInstanceValid(badge)) badge.Position = new Vector2(target.Size.X - badge.Size.X - 16, Math.Max(0, (target.Size.Y - badge.Size.Y) / 2)); }).CallDeferred();

@@ -13,11 +13,14 @@ public static class Badges
 
     private static readonly List<WeakReference<Control>> Live = new();
 
+    /// <summary>Green for a real gain, red for a real loss, grey when it rounds to about even (under half a point).</summary>
+    public static Color Tone(double x) => x >= 0.005 ? Good : x <= -0.005 ? Bad : Muted;
+
     public static string Pct(double x) => (x >= 0 ? "+" : "−") + Math.Abs(x * 100).ToString("0.0") + "%";
 
     /// <summary>Create (or replace) a badge under <paramref name="parent"/>, centred horizontally at <paramref name="y"/>.</summary>
     public static PanelContainer Attach(Node parent, string text, Color color, bool highlight, float y, int fontSize = 26, float width = 200,
-        Node? scope = null, string? cardId = null)
+        Node? scope = null, string? cardId = null, string? detail = null, Color? detailColor = null)
     {
         parent.GetNodeOrNull(NodeName)?.QueueFree();
         // No ZIndex lift: screens that open on top (e.g. Smith over the rest site) must be able to cover our labels.
@@ -36,7 +39,21 @@ public static class Badges
         label.AddThemeColorOverride("font_color", color);
         label.AddThemeConstantOverride("outline_size", 6);
         label.AddThemeColorOverride("font_outline_color", Colors.Black);
-        panel.AddChild(label);
+        if (detail == null) panel.AddChild(label);
+        else
+        {
+            // Main number on top; the smaller second line explains part of it and gets its own colour.
+            var stack = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+            stack.AddThemeConstantOverride("separation", 0);
+            stack.AddChild(label);
+            var sub = new Label { Text = detail, HorizontalAlignment = HorizontalAlignment.Center, MouseFilter = Control.MouseFilterEnum.Ignore };
+            sub.AddThemeFontSizeOverride("font_size", Math.Max(14, (int)(fontSize * 0.75f)));
+            sub.AddThemeColorOverride("font_color", detailColor ?? Muted);
+            sub.AddThemeConstantOverride("outline_size", 5);
+            sub.AddThemeColorOverride("font_outline_color", Colors.Black);
+            stack.AddChild(sub);
+            panel.AddChild(stack);
+        }
         panel.CustomMinimumSize = new Vector2(width, 0);
         panel.Visible = Settings.Current.Enabled;
         parent.AddChild(panel);

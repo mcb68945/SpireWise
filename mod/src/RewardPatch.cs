@@ -135,10 +135,12 @@ public static class RewardPatch
 
         foreach (var (holder, cardId, s) in scored)
         {
-            string text = !s.Known ? "no data" : Badges.Pct(s.Gain) + " win" +
-                (s.LowData ? "\nlow data" : Math.Abs(s.Synergy) >= 0.003 ? $"\n{(coop ? "team+deck" : "synergy")} {Badges.Pct(s.Synergy)}" : "");
-            Badges.Attach(holder, text, !s.Known ? Badges.Muted : s.Gain >= 0 ? Badges.Good : Badges.Bad,
-                highlight: s.Known && best > 0 && s.Gain == best, y: 235, scope: screen, cardId: cardId);
+            string text = !s.Known ? "no data" : Badges.Pct(s.Gain) + " win";
+            string? detail = !s.Known ? null : s.LowData ? "low data"
+                : Math.Abs(s.Synergy) >= 0.003 ? Badges.Pct(s.Synergy) + (coop ? " from team+deck" : " from your deck") : null;
+            Badges.Attach(holder, text, !s.Known ? Badges.Muted : Badges.Tone(s.Gain),
+                detail: detail, detailColor: s.LowData ? Badges.Muted : Badges.Tone(s.Synergy),
+                highlight: s.Known && best > 0 && s.Gain == best, y: 235, width: 230, scope: screen, cardId: cardId);
         }
 
         var notes = new List<string> { $"SpireWise · A10 data · {ctx.DataVersion}" };
