@@ -316,3 +316,40 @@ public static class ExtraStore
         return Sig(z);
     }
 }
+
+
+/// <summary>Event option values: change in A10 win chance from each option vs what players usually pick there (events.json).</summary>
+public sealed class EventOptionValue
+{
+    [JsonPropertyName("value")] public double Value { get; set; }
+    [JsonPropertyName("n")] public int N { get; set; }
+}
+
+public sealed class EventData
+{
+    [JsonPropertyName("version")] public string Version { get; set; } = "";
+    [JsonPropertyName("options")] public Dictionary<string, EventOptionValue> Options { get; set; } = new();
+}
+
+public static class EventStore
+{
+    private static readonly Dictionary<string, EventData?> Cache = new();
+
+    /// <summary>The data version's events file, or the newest one bundled (event options are matched by text key).</summary>
+    public static EventData? Get(string version)
+    {
+        if (Cache.TryGetValue(version, out var d)) return d;
+        var asm = System.Reflection.Assembly.GetExecutingAssembly();
+        var names = asm.GetManifestResourceNames().Select(n => n.Replace('\\', '/')).Where(n => n.EndsWith("/events.json.gz")).ToList();
+        var pick = names.FirstOrDefault(n => n == $"{version}/events.json.gz") ?? names.OrderByDescending(n => n).FirstOrDefault();
+        d = null;
+        if (pick != null)
+        {
+            var res = asm.GetManifestResourceNames().First(n => n.Replace('\\', '/') == pick);
+            using var s = asm.GetManifestResourceStream(res)!;
+            using var gz = new System.IO.Compression.GZipStream(s, System.IO.Compression.CompressionMode.Decompress);
+            d = JsonSerializer.Deserialize<EventData>(gz);
+        }
+        return Cache[version] = d;
+    }
+}

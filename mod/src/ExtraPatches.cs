@@ -113,6 +113,33 @@ public static class ExtraPatches
         Settings.StartHotkey();
         if (Settings.ShowAncients) Safe("ancient", () => AncientOptions(__instance));
         if (Settings.ShowRemoveUpgrade) Safe("doors", () => DoorsOptions(__instance));
+        if (Settings.ShowAncients) Safe("event", () => EventOptions(__instance));
+    }
+
+    // Any other event: each option's A10 win change vs what players usually pick at that event page.
+    private static void EventOptions(object instance)
+    {
+        var button = (NEventOptionButton)instance;
+        string key = button.Option?.TextKey ?? "";
+        if (key == "" || button.Event is AncientEventModel || key.StartsWith("DOORS_OF_LIGHT_AND_DARK.") || button.GetParent() == null) return;
+        var ctx = RunContext.Current();
+        var data = ctx == null ? null : EventStore.Get(ctx.DataVersion);
+        if (ctx == null || data == null) return;
+        var options = button.GetParent().GetChildren().OfType<NEventOptionButton>()
+            .Select(b => (b, v: data.Options.TryGetValue(b.Option?.TextKey ?? "", out var o) ? o : null)).ToList();
+        var known = options.Where(o => o.v != null).ToList();
+        if (known.Count == 0) return;
+        double best = known.Max(o => o.v!.Value);
+        foreach (var (b, v) in options)
+        {
+            if (v == null) continue;
+            var badge = Badges.Attach(b, Badges.Pct(v.Value), Badges.Tone(v.Value),
+                highlight: known.Count > 1 && v.Value == best && best >= 0.005, y: 0, fontSize: 20, width: 96);
+            var target = b;
+            Callable.From(() => { if (GodotObject.IsInstanceValid(badge)) badge.Position = new Vector2(target.Size.X - badge.Size.X - 16, Math.Max(0, (target.Size.Y - badge.Size.Y) / 2)); }).CallDeferred();
+        }
+        if (button == options.Last().b)
+            Plugin.Log($"event {key[..Math.Max(0, key.IndexOf(".pages."))]}: " + string.Join(", ", known.Select(o => $"{o.b.Option!.TextKey.Split('.').Last()} {o.v!.Value * 100:+0.0;-0.0}%")));
     }
 
     // Doors of Light and Dark: label Light (upgrade) and Dark (remove) with how they compare.
