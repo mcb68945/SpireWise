@@ -1,4 +1,5 @@
 using Godot;
+using MegaCrit.Sts2.Core.Nodes.Cards.Holders;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Nodes.Cards;
 using MegaCrit.Sts2.Core.Nodes.Screens.CardSelection;
@@ -47,6 +48,8 @@ public static class DeckScreenPatch
         private readonly bool _removal, _transform;
         private readonly Dictionary<string, double?> _scores = new();
         private readonly HashSet<string> _blocked = new();
+        private readonly Dictionary<string, double> _upgradeValue = new();
+        private NGridCardHolder? _highlight;
         private double _best = double.NaN;
         private SceneTree? _tree;
         private int _errors;
@@ -72,6 +75,10 @@ public static class DeckScreenPatch
                 var models = _removal ? data.Removal : data.Upgrade;
                 foreach (var id in ctx.DeckSet)
                     _scores[id] = DecisionStore.Evaluate(models.GetValueOrDefault(id), ctx.Context, ctx.DeckIds.Count, ctx.Floor, _removal);
+                if (_removal)
+                    foreach (var id in ctx.DeckSet)
+                        if (DecisionStore.Evaluate(data.Upgrade.GetValueOrDefault(id), ctx.Context, ctx.DeckIds.Count, ctx.Floor, false) is double up)
+                            _upgradeValue[id] = up;
                 // Upgrading a draw card mostly adds draw, which Fiddle blocks: don't score or recommend it.
                 if (!_removal) foreach (var id in ctx.DeckSet.Where(id => DrawBlock.Blocked(ctx, id)).ToList()) { _scores[id] = null; _blocked.Add(id); }
             }
@@ -93,28 +100,38 @@ public static class DeckScreenPatch
                 if (!GodotObject.IsInstanceValid(_screen) || !_screen.IsInsideTree()) { Stop(); return; }
                 var grid = AccessTools.Field(typeof(NCardGridSelectionScreen), "_grid")?.GetValue(_screen) as NCardGrid;
                 if (grid == null) return;
-                foreach (var holder in grid.CurrentlyDisplayedCardHolders)
+                var holders = grid.CurrentlyDisplayedCardHolders.ToList();
+                // Score each holder, not each card id: removing an upgraded copy also throws away its upgrade.
+                double? Score(NGridCardHolder h)
+                {
+                    var cid = h.CardModel?.Id.ToString();
+                    if (cid == null || !_scores.TryGetValue(cid, out var sv) || sv == null) return null;
+                    if (_removal && h.CardModel!.IsUpgraded && _upgradeValue.TryGetValue(cid, out var up) && up > 0) return sv.Value - up;
+                    return sv.Value;
+                }
+                // Gold border on one card only: the first copy with the best score (identical copies tie).
+                if (_highlight == null || !GodotObject.IsInstanceValid(_highlight))
+                {
+                    double best = double.NegativeInfinity;
+                    foreach (var h in holders) if (Score(h) is double x && x > best + 1e-9) { best = x; _highlight = h; }
+                    if (best <= 0) _highlight = null;
+                }
+                foreach (var holder in holders)
                 {
                     var id = holder.CardModel?.Id.ToString();
                     var existing = holder.GetNodeOrNull<Control>(Badges.NodeName);
-                    if (id != null && _blocked.Contains(id))
-                    {
-                        if (existing != null && existing.HasMeta("sw_id") && (string)existing.GetMeta("sw_id") == id) continue;
-                        var note = Badges.Attach(holder, "Fiddle blocks draw", Badges.Muted, highlight: false, y: 150, fontSize: 20, width: 190,
+                    string tag = id + (holder.CardModel?.IsUpgraded == true ? "+" : "") + (holder == _highlight ? "*" : "");
+                    if (existing != null && existing.HasMeta("sw_id") && (string)existing.GetMeta("sw_id") == tag) continue;
+                    if (id == null) { existing?.QueueFree(); continue; }
+                    Control badge;
+                    if (_blocked.Contains(id))
+                        badge = Badges.Attach(holder, "Fiddle blocks draw", Badges.Muted, highlight: false, y: 150, fontSize: 20, width: 190, scope: _screen, cardId: id);
+                    else if (Score(holder) is double v)
+                        badge = Badges.Attach(holder, $"{Verb} {Badges.Pct(v)}", Badges.Tone(v), highlight: holder == _highlight, y: 150, fontSize: 22, width: 190,
                             scope: _screen, cardId: id);
-                        note.SetMeta("sw_id", id);
-                        continue;
-                    }
-                    if (id == null || !_scores.TryGetValue(id, out var v) || v == null)
-                    {
-                        existing?.QueueFree();
-                        continue;
-                    }
-                    if (existing != null && existing.HasMeta("sw_id") && (string)existing.GetMeta("sw_id") == id) continue;
-                    var badge = Badges.Attach(holder, $"{Verb} {Badges.Pct(v.Value)}",
-                        Badges.Tone(v.Value), highlight: v.Value == _best && _best > 0, y: 150, fontSize: 22, width: 190,
-                        scope: _screen, cardId: id);
-                    badge.SetMeta("sw_id", id);
+                    else
+                        badge = Badges.Attach(holder, "no data", Badges.Muted, highlight: false, y: 150, fontSize: 20, width: 190, scope: _screen, cardId: id);
+                    badge.SetMeta("sw_id", tag);
                 }
             }
             catch (Exception e)

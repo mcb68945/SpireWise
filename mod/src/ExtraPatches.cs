@@ -103,7 +103,7 @@ public static class ExtraPatches
         if (share == null || n < 30) return;
         double mine = smith ? share.Value : 1 - share.Value;
         Badges.Attach(button, $"winners {(smith ? "smithed" : "rested")} {mine * 100:0}%\nat {ctx.Hp * 100 / Math.Max(1, ctx.MaxHp)}% HP here",
-            mine >= 0.5 ? Badges.Good : Badges.Muted, highlight: mine >= 0.5, y: 110, fontSize: 18, width: 210);
+            mine >= 0.5 ? Badges.Good : Badges.Muted, highlight: mine >= 0.5, y: 185, fontSize: 18, width: 210);
     }
 
     // ---------------- #4/#5 Ancient options (relic choices) ----------------
