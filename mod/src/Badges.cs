@@ -16,10 +16,12 @@ public static class Badges
     public static string Pct(double x) => (x >= 0 ? "+" : "−") + Math.Abs(x * 100).ToString("0.0") + "%";
 
     /// <summary>Create (or replace) a badge under <paramref name="parent"/>, centred horizontally at <paramref name="y"/>.</summary>
-    public static PanelContainer Attach(Node parent, string text, Color color, bool highlight, float y, int fontSize = 26, float width = 200)
+    public static PanelContainer Attach(Node parent, string text, Color color, bool highlight, float y, int fontSize = 26, float width = 200,
+        Node? scope = null, string? cardId = null)
     {
         parent.GetNodeOrNull(NodeName)?.QueueFree();
-        var panel = new PanelContainer { Name = NodeName, MouseFilter = Control.MouseFilterEnum.Ignore, ZIndex = 5 };
+        // No ZIndex lift: screens that open on top (e.g. Smith over the rest site) must be able to cover our labels.
+        var panel = new PanelContainer { Name = NodeName, MouseFilter = Control.MouseFilterEnum.Ignore };
         var box = new StyleBoxFlat
         {
             BgColor = new Color(0.08f, 0.09f, 0.11f, 0.88f),
@@ -39,8 +41,45 @@ public static class Badges
         panel.Visible = Settings.Current.Enabled;
         parent.AddChild(panel);
         panel.Position = new Vector2(-width / 2, y);
+        // The game reuses card holders between screens. A label dies with the screen it was made for, and a card label
+        // also dies as soon as its holder shows a different card (checked every frame by Sweep).
+        if (scope != null)
+        {
+            var weak = new WeakReference<PanelContainer>(panel);
+            scope.TreeExiting += () => { if (weak.TryGetTarget(out var p) && GodotObject.IsInstanceValid(p)) p.QueueFree(); };
+        }
+        if (cardId != null) panel.SetMeta(CardMeta, cardId);
+        EnsureSweep();
         lock (Live) { Live.RemoveAll(w => !w.TryGetTarget(out var c) || !GodotObject.IsInstanceValid(c)); Live.Add(new(panel)); }
         return panel;
+    }
+
+    private const string CardMeta = "sw_card";
+    private static bool _sweeping;
+
+    private static void EnsureSweep()
+    {
+        if (_sweeping || Engine.GetMainLoop() is not SceneTree tree) return;
+        _sweeping = true;
+        tree.ProcessFrame += Sweep;
+    }
+
+    /// <summary>Free card labels whose holder now shows a different card (or none).</summary>
+    private static void Sweep()
+    {
+        List<Control> stale = new();
+        lock (Live)
+        {
+            foreach (var w in Live)
+            {
+                if (!w.TryGetTarget(out var c) || !GodotObject.IsInstanceValid(c) || !c.HasMeta(CardMeta)) continue;
+                var holder = c.GetParent();
+                var model = holder?.GetType().GetProperty("CardModel")?.GetValue(holder);
+                var id = model?.GetType().GetProperty("Id")?.GetValue(model)?.ToString();
+                if (id != (string)c.GetMeta(CardMeta)) stale.Add(c);
+            }
+        }
+        foreach (var c in stale) c.QueueFree();
     }
 
     /// <summary>Register any SpireWise control so F7 / the settings switch shows or hides it.</summary>

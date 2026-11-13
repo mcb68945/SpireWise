@@ -133,12 +133,12 @@ public static class RewardPatch
         var known = scored.Where(s => s.score.Known).ToList();
         double best = known.Count > 0 ? known.Max(s => s.score.Gain) : double.NaN;
 
-        foreach (var (holder, _, s) in scored)
+        foreach (var (holder, cardId, s) in scored)
         {
             string text = !s.Known ? "no data" : Badges.Pct(s.Gain) + " win" +
                 (s.LowData ? "\nlow data" : Math.Abs(s.Synergy) >= 0.003 ? $"\n{(coop ? "team+deck" : "synergy")} {Badges.Pct(s.Synergy)}" : "");
             Badges.Attach(holder, text, !s.Known ? Badges.Muted : s.Gain >= 0 ? Badges.Good : Badges.Bad,
-                highlight: s.Known && best > 0 && s.Gain == best, y: 235);
+                highlight: s.Known && best > 0 && s.Gain == best, y: 235, scope: screen, cardId: cardId);
         }
 
         var notes = new List<string> { $"SpireWise · A10 data · {ctx.DataVersion}" };
@@ -159,7 +159,7 @@ public static class RewardPatch
         screen.GetNodeOrNull(BannerName)?.QueueFree();
         var label = new Label
         {
-            Name = BannerName, HorizontalAlignment = HorizontalAlignment.Center, MouseFilter = Control.MouseFilterEnum.Ignore, ZIndex = 5,
+            Name = BannerName, HorizontalAlignment = HorizontalAlignment.Center, MouseFilter = Control.MouseFilterEnum.Ignore,
             Text = string.IsNullOrEmpty(headline) ? note : headline + "\n" + note, Visible = Settings.Current.Enabled,
         };
         label.AddThemeFontSizeOverride("font_size", 22);
@@ -169,6 +169,6 @@ public static class RewardPatch
         screen.AddChild(label);
         var vp = screen.GetViewportRect().Size;
         label.Size = new Vector2(1000, 60);
-        label.Position = new Vector2(vp.X / 2 - 500, vp.Y * 0.86f);
+        label.Position = new Vector2(vp.X / 2 - 500, vp.Y * 0.905f);   // below the Skip button, not on it
     }
 }

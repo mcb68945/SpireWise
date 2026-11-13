@@ -101,7 +101,8 @@ public static class DeckScreenPatch
                     }
                     if (existing != null && existing.HasMeta("sw_id") && (string)existing.GetMeta("sw_id") == id) continue;
                     var badge = Badges.Attach(holder, $"{Verb} {Badges.Pct(v.Value)}",
-                        v.Value >= 0 ? Badges.Good : Badges.Bad, highlight: v.Value == _best && _best > 0, y: 150, fontSize: 22, width: 190);
+                        v.Value >= 0 ? Badges.Good : Badges.Bad, highlight: v.Value == _best && _best > 0, y: 150, fontSize: 22, width: 190,
+                        scope: _screen, cardId: id);
                     badge.SetMeta("sw_id", id);
                 }
             }

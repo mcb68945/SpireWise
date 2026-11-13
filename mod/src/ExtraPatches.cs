@@ -139,7 +139,7 @@ public static class ExtraPatches
             var badge = Badges.Attach(b, (v >= 0 ? "better " : "") + Badges.Pct(v) + " win", v >= 0 ? Badges.Good : Badges.Bad,
                 highlight: v > 0, y: 0, fontSize: 20, width: 170);
             var target = b;
-            Callable.From(() => { if (GodotObject.IsInstanceValid(badge)) badge.Position = new Vector2(-180, Math.Max(0, target.Size.Y / 2 - 18)); }).CallDeferred();
+            Callable.From(() => { if (GodotObject.IsInstanceValid(badge)) badge.Position = new Vector2(target.Size.X + 12, Math.Max(0, target.Size.Y / 2 - 18)); }).CallDeferred();
         }
         Plugin.Log($"doors: {ctx.CharKey} floor {ctx.Floor}, deck {ctx.DeckIds.Count} ({basics} basics): remove vs upgrade {g * 100:+0.0;-0.0}%");
     }
@@ -162,7 +162,7 @@ public static class ExtraPatches
             var badge = Badges.Attach(b, Badges.Pct(v.Value) + " win", v.Value >= 0 ? Badges.Good : Badges.Bad,
                 highlight: v.Value == best && best > 0, y: 0, fontSize: 20, width: 140);
             var target = b;
-            Callable.From(() => { if (GodotObject.IsInstanceValid(badge)) badge.Position = new Vector2(-150, Math.Max(0, target.Size.Y / 2 - 18)); }).CallDeferred();
+            Callable.From(() => { if (GodotObject.IsInstanceValid(badge)) badge.Position = new Vector2(target.Size.X + 12, Math.Max(0, target.Size.Y / 2 - 18)); }).CallDeferred();
         }
     }
 
@@ -185,7 +185,7 @@ public static class ExtraPatches
         var p = ExtraStore.WinChance(ex.Win, ctx.DeckSet, ctx.DeckIds.Count, ctx.Hp, ctx.MaxHp, ctx.Gold, ctx.Relics, ctx.Floor);
         if (p == null) return;
         map.GetNodeOrNull(WinLabelName)?.QueueFree();
-        var label = new Label { Name = WinLabelName, MouseFilter = Control.MouseFilterEnum.Ignore, ZIndex = 20, Visible = Settings.Current.Enabled,
+        var label = new Label { Name = WinLabelName, MouseFilter = Control.MouseFilterEnum.Ignore, Visible = Settings.Current.Enabled,
             Text = $"SpireWise win chance: {p.Value * 100:0}%" + (ctx.Ascension != 10 ? $"  (A10 model, you're on A{ctx.Ascension})" : "") };
         label.AddThemeFontSizeOverride("font_size", 26);
         label.AddThemeColorOverride("font_color", Badges.Gold);
