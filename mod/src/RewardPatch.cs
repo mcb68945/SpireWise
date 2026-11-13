@@ -22,12 +22,40 @@ public sealed class RunContext
     public List<string>? Mates;
     public int Hp, MaxHp, Gold, Relics;
 
+    private static string? _lastMode;
+
+    /// <summary>
+    /// True for an ordinary run. Read by name so it works on game versions with and without the
+    /// v0.113 modes (GameMode: Standard, Daily, Dread, Blitz; RunState.IsCustomGame).
+    /// </summary>
+    public static bool IsStandardRun(object state)
+    {
+        string mode = "Standard";
+        bool custom = false;
+        try
+        {
+            var t = state.GetType();
+            mode = t.GetProperty("GameMode")?.GetValue(state)?.ToString() ?? "Standard";
+            custom = t.GetProperty("IsCustomGame")?.GetValue(state) is true;
+        }
+        catch { /* unknown shape: assume standard */ }
+        bool ok = mode == "Standard" && !custom;
+        string key = mode + (custom ? "/custom" : "");
+        if (key != _lastMode)
+        {
+            _lastMode = key;
+            if (!ok) Plugin.Log($"{mode}{(custom ? " (custom)" : "")} run: SpireWise's data only covers standard A10 runs, so labels are off for this run");
+        }
+        return ok;
+    }
+
     public static string CharKeyOf(string id) => (id.Contains('.') ? id[(id.IndexOf('.') + 1)..] : id).ToLowerInvariant();
 
     public static RunContext? Current()
     {
         var state = RunManager.Instance.DebugOnlyGetState();
         if (state == null) return null;
+        if (!IsStandardRun(state)) return null;   // Blitz, Dread, Daily, custom: our data is standard A10 runs only
         var me = LocalContext.GetMe(state.Players);
         if (me == null) return null;
         var ctx = new RunContext
