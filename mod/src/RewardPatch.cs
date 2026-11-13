@@ -140,7 +140,7 @@ public static class RewardPatch
                 : Math.Abs(s.Synergy) >= 0.003 ? Badges.Pct(s.Synergy) + (coop ? " from team+deck" : " from your deck") : null;
             Badges.Attach(holder, text, !s.Known ? Badges.Muted : Badges.Tone(s.Gain),
                 detail: detail, detailColor: s.LowData ? Badges.Muted : Badges.Tone(s.Synergy),
-                highlight: s.Known && best > 0 && s.Gain == best, y: 235, width: 230, scope: screen, cardId: cardId);
+                highlight: s.Known && known.Count > 1 && s.Gain == best, y: 235, width: 230, scope: screen, cardId: cardId);
         }
 
         var notes = new List<string> { $"SpireWise · A10 data · {ctx.DataVersion}" };
@@ -149,7 +149,9 @@ public static class RewardPatch
         if (coop && coopData != null) notes.Add($"· co-op model ({ctx.Players}p with {string.Join(", ", ctx.Mates!)})");
         else if (ctx.Players > 1) notes.Add("· solo model (no co-op data for this team size)");
         notes.Add("· F7 hides");
-        string headline = known.Count > 0 && best <= 0 ? "Skip looks best: every card scores below skipping." : "";
+        // No "skip" advice for now: in A10 data, stronger players skip more and also win more, which pushes every
+        // card's number down. Until the model controls for player skill, trust the ranking more than the sign.
+        string headline = "";
         AttachBanner(screen, headline, string.Join(" ", notes));
 
         Plugin.Log($"{ctx.CharKey} floor {ctx.Floor} deck {ctx.DeckIds.Count}: " +
