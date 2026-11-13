@@ -59,7 +59,24 @@ public static class ExtraPatches
         if (ctx == null || ex == null) return;
         var v = ExtraStore.Relic(ex.Relic.GetValueOrDefault(entry.Model.Id.ToString()), ctx.DeckIds.Count, ctx.Floor, shop: true, ancient: false, offered: 3);
         if (v == null) { slot.GetNodeOrNull(Badges.NodeName)?.QueueFree(); return; }
-        Badges.Attach(slot, Badges.Pct(v.Value) + " win", v.Value >= 0 ? Badges.Good : Badges.Bad, highlight: false, y: 70, fontSize: 20, width: 150);
+        var badge = Badges.Attach(slot, Badges.Pct(v.Value) + " win", v.Value >= 0 ? Badges.Good : Badges.Bad, highlight: false, y: 70, fontSize: 20, width: 150);
+        // A fixed offset landed on the price tag. Once the shop has laid out, move the label just below the price.
+        Callable.From(() => PlaceBelowCost(slot, badge)).CallDeferred();
+    }
+
+    private static readonly System.Reflection.FieldInfo? CostLabelField = AccessTools.Field(typeof(NMerchantSlot), "_costLabel");
+
+    private static void PlaceBelowCost(Control slot, Control badge)
+    {
+        try
+        {
+            if (!GodotObject.IsInstanceValid(slot) || !GodotObject.IsInstanceValid(badge)) return;
+            if (CostLabelField?.GetValue(slot) is not Control cost || !GodotObject.IsInstanceValid(cost)) return;
+            var price = cost.GetGlobalRect();
+            var size = badge.GetGlobalRect().Size;
+            badge.GlobalPosition = new Vector2(price.GetCenter().X - size.X / 2, price.End.Y + 6);
+        }
+        catch (Exception e) { Plugin.LogError($"shop relic label placement failed: {e.Message}"); }
     }
 
     // ---------------- #2 rest site: what winning players did ----------------
