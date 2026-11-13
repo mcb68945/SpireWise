@@ -16,6 +16,8 @@ public sealed class RunContext
     public string? GameVersion;
     public List<string> DeckIds = new();
     public HashSet<string> DeckSet = new();
+    /// <summary>Deck cards plus relic ids ("RELIC.X") the player holds: what the card and decision models condition on.</summary>
+    public HashSet<string> Context = new();
     public int Floor;
     public int Ascension;
     public int Players;
@@ -70,6 +72,8 @@ public sealed class RunContext
         ctx.DeckIds = me.Deck.Cards.Select(c => c.Id.ToString()).ToList();
         try { ctx.Hp = me.Creature.CurrentHp; ctx.MaxHp = me.Creature.MaxHp; ctx.Gold = me.Gold; ctx.Relics = me.Relics.Count; } catch { /* optional fields */ }
         ctx.DeckSet = new HashSet<string>(ctx.DeckIds);
+        ctx.Context = new HashSet<string>(ctx.DeckSet);
+        try { foreach (var r in me.Relics) ctx.Context.Add(r.Id.ToString()); } catch { /* relics optional */ }
         if (ctx.Players is >= 2 and <= 4)
             ctx.Mates = state.Players.Where(p => !LocalContext.IsMe(p)).Select(p => CharKeyOf(p.Character.Id.ToString())).ToList();
         return ctx;
@@ -85,8 +89,8 @@ public static class CardScorer
         if (solo == null) return default;
         var coopData = ctx.Mates != null ? ModelStore.Get(ctx.DataVersion, ctx.CharKey + ".coop") : null;
         if (coopData != null && coopData.Models.ContainsKey(id))
-            return ModelStore.Evaluate(coopData, id, ctx.DeckSet, ctx.DeckIds.Count, ctx.Floor, ctx.Mates);
-        var s = ModelStore.Evaluate(solo, id, ctx.DeckSet, ctx.DeckIds.Count, ctx.Floor);
+            return ModelStore.Evaluate(coopData, id, ctx.Context, ctx.DeckIds.Count, ctx.Floor, ctx.Mates);
+        var s = ModelStore.Evaluate(solo, id, ctx.Context, ctx.DeckIds.Count, ctx.Floor);
         return coopData != null && s.Known ? s with { LowData = true } : s;
     }
 }
@@ -121,8 +125,8 @@ public static class RewardPatch
         Score Eval(string id)
         {
             if (coopData != null && coopData.Models.ContainsKey(id))
-                return ModelStore.Evaluate(coopData, id, ctx.DeckSet, ctx.DeckIds.Count, ctx.Floor, ctx.Mates);
-            var s = ModelStore.Evaluate(solo, id, ctx.DeckSet, ctx.DeckIds.Count, ctx.Floor);
+                return ModelStore.Evaluate(coopData, id, ctx.Context, ctx.DeckIds.Count, ctx.Floor, ctx.Mates);
+            var s = ModelStore.Evaluate(solo, id, ctx.Context, ctx.DeckIds.Count, ctx.Floor);
             return coopData != null && s.Known ? s with { LowData = true } : s;
         }
 

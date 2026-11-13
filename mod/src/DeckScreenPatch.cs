@@ -70,7 +70,7 @@ public static class DeckScreenPatch
                 if (data == null) { Plugin.Log($"no remove/upgrade data for {ctx.CharKey} ({ctx.DataVersion})"); return; }
                 var models = _removal ? data.Removal : data.Upgrade;
                 foreach (var id in ctx.DeckSet)
-                    _scores[id] = DecisionStore.Evaluate(models.GetValueOrDefault(id), ctx.DeckSet, ctx.DeckIds.Count, ctx.Floor, _removal);
+                    _scores[id] = DecisionStore.Evaluate(models.GetValueOrDefault(id), ctx.Context, ctx.DeckIds.Count, ctx.Floor, _removal);
             }
             var known = _scores.Values.Where(v => v.HasValue).Select(v => v!.Value).ToList();
             _best = known.Count > 0 ? known.Max() : double.NaN;

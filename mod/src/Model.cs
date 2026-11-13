@@ -130,6 +130,8 @@ public sealed class DecisionModel
     [JsonPropertyName("ancient")] public double Ancient { get; set; }
     [JsonPropertyName("bucket")] public double[] Bucket { get; set; } = new double[6];
     [JsonPropertyName("delta")] public Dictionary<string, double> Delta { get; set; } = new();
+    /// <summary>chosen x relic: how a held relic changes the value of removing/upgrading this card.</summary>
+    [JsonPropertyName("gamma")] public Dictionary<string, double> Gamma { get; set; } = new();
 }
 
 public sealed class DecisionData
@@ -190,9 +192,14 @@ public static class DecisionStore
         if (m == null) return null;
         int b = Math.Min((Math.Max(1, floor) - 1) / 9, 5);
         double z0 = m.A + m.Bucket[b] + m.K * deckSize / 10.0 + (removal ? m.Kn + m.Shop : 0);
-        foreach (var p in deckSet) if (m.Delta.TryGetValue(p, out var v)) z0 += v;
+        double g = 0;
+        foreach (var p in deckSet)
+        {
+            if (m.Delta.TryGetValue(p, out var v)) z0 += v;
+            if (m.Gamma.TryGetValue(p, out var gv)) g += gv;
+        }
         static double Sig(double z) => 1 / (1 + Math.Exp(-z));
-        return Sig(z0 + m.Beta) - Sig(z0);
+        return Sig(z0 + m.Beta + g) - Sig(z0);
     }
 }
 

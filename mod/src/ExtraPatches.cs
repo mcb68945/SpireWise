@@ -138,7 +138,7 @@ public static class ExtraPatches
             var data = DecisionStore.Get(ctx.DataVersion, ctx.CharKey);
             if (data == null) return;
             double? Best(bool removal) => ctx.DeckSet
-                .Select(id => DecisionStore.Evaluate((removal ? data.Removal : data.Upgrade).GetValueOrDefault(id), ctx.DeckSet, ctx.DeckIds.Count, ctx.Floor, removal))
+                .Select(id => DecisionStore.Evaluate((removal ? data.Removal : data.Upgrade).GetValueOrDefault(id), ctx.Context, ctx.DeckIds.Count, ctx.Floor, removal))
                 .Where(v => v.HasValue).Select(v => v!.Value).DefaultIfEmpty(double.NaN).Max() is var m && !double.IsNaN(m) ? m : null;
             dark = Best(true); light = Best(false);
             if (dark == null || light == null) return;
