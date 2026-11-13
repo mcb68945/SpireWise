@@ -19,6 +19,8 @@ public static class Settings
         public bool RestSite { get; set; } = true;
         public bool Ancients { get; set; } = true;
         public bool WinChance { get; set; } = true;
+        /// <summary>Keep a copy of the solo run save after every room, for Rewind.</summary>
+        public bool Rewind { get; set; } = true;
     }
 
     public static Data Current { get; private set; } = new();

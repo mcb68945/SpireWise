@@ -40,6 +40,12 @@ public static class Plugin
             Hook(N + "Events.NEventOptionButton", "_Ready", owner: typeof(ExtraPatches), feature: "ancient choices", postfix: nameof(ExtraPatches.EventOptionPostfix));
             Hook(N + "Screens.Map.NMapScreen", "Open", owner: typeof(ExtraPatches), feature: "win chance", postfix: nameof(ExtraPatches.MapOpenPostfix));
 
+            Hook(N + "Screens.MainMenu.NMainMenu", "_Ready", owner: typeof(MenuButtons), feature: "menu buttons", postfix: nameof(MenuButtons.ReadyPostfix));
+            Hook("MegaCrit.Sts2.Core.Saves.Managers.RunSaveManager", "SaveRun", owner: typeof(Rewind), feature: "rewind snapshots",
+                 prefix: nameof(Rewind.SaveRunPrefix), args: new[] { typeof(MegaCrit.Sts2.Core.Saves.SerializableRun), typeof(bool) });
+            Hook("MegaCrit.Sts2.Core.Saves.SaveManager", "SaveRunHistory", owner: typeof(Rewind), feature: "rewind marking",
+                 prefix: nameof(Rewind.SaveRunHistoryPrefix));
+
             Settings.StartHotkey();
             ModConfigBridge.DeferredRegister();
             Log($"loaded {Version} · data {string.Join(", ", ModelStore.Versions)} · on: {string.Join(", ", Installed)}" +
@@ -54,12 +60,12 @@ public static class Plugin
 
     private static string Version => typeof(Plugin).Assembly.GetName().Version?.ToString(3) ?? "?";
 
-    private static void Hook(string typeName, string method, Type owner, string feature, string? prefix = null, string? postfix = null)
+    private static void Hook(string typeName, string method, Type owner, string feature, string? prefix = null, string? postfix = null, Type[]? args = null)
     {
         try
         {
             var type = AccessTools.TypeByName(typeName);
-            var target = type == null ? null : AccessTools.Method(type, method);
+            var target = type == null ? null : AccessTools.Method(type, method, args);
             if (target == null) { Skipped.Add(feature); LogError($"{feature}: {typeName}.{method} not found, feature off"); return; }
             _harmony!.Patch(target,
                 prefix: prefix == null ? null : new HarmonyMethod(AccessTools.Method(owner, prefix)),
