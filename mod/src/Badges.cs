@@ -22,7 +22,7 @@ public static class Badges
     public static PanelContainer Attach(Node parent, string text, Color color, bool highlight, float y, int fontSize = 26, float width = 200,
         Node? scope = null, string? cardId = null, string? detail = null, Color? detailColor = null)
     {
-        parent.GetNodeOrNull(NodeName)?.QueueFree();
+        Remove(parent);
         // No ZIndex lift: screens that open on top (e.g. Smith over the rest site) must be able to cover our labels.
         var panel = new PanelContainer { Name = NodeName, MouseFilter = Control.MouseFilterEnum.Ignore };
         var box = new StyleBoxFlat
@@ -69,6 +69,16 @@ public static class Badges
         EnsureSweep();
         lock (Live) { Live.RemoveAll(w => !w.TryGetTarget(out var c) || !GodotObject.IsInstanceValid(c)); Live.Add(new(panel)); }
         return panel;
+    }
+
+    /// <summary>Take the old badge out of the tree right away. QueueFree alone leaves it in place until the end of the
+    /// frame, so the new badge gets renamed and the next refresh can't find it, leaving duplicates stacked up.</summary>
+    public static void Remove(Node parent, string name = NodeName)
+    {
+        var old = parent.GetNodeOrNull(name);
+        if (old == null) return;
+        parent.RemoveChild(old);
+        old.QueueFree();
     }
 
     private const string CardMeta = "sw_card";

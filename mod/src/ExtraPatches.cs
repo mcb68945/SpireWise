@@ -202,16 +202,17 @@ public static class ExtraPatches
         if (ctx == null || ex?.Win == null) return;
         var p = ExtraStore.WinChance(ex.Win, ctx.DeckSet, ctx.DeckIds.Count, ctx.Hp, ctx.MaxHp, ctx.Gold, ctx.Relics, ctx.Floor);
         if (p == null) return;
-        map.GetNodeOrNull(WinLabelName)?.QueueFree();
-        var label = new Label { Name = WinLabelName, MouseFilter = Control.MouseFilterEnum.Ignore, Visible = Settings.Current.Enabled,
-            Text = $"SpireWise win chance: {p.Value * 100:0}%" + (ctx.Ascension != 10 ? $"  (A10 model, you're on A{ctx.Ascension})" : "") };
-        label.AddThemeFontSizeOverride("font_size", 26);
-        label.AddThemeColorOverride("font_color", Badges.Gold);
-        label.AddThemeConstantOverride("outline_size", 7);
-        label.AddThemeColorOverride("font_outline_color", Colors.Black);
-        map.AddChild(label);
-        label.Position = new Vector2(40, 130);
-        Badges.Track(label);
+        // Clear every copy, including ones an older build left behind under a renamed node.
+        foreach (var n in map.GetChildren().Where(c => c.Name.ToString().Contains(WinLabelName) || (c is Control ctl && ctl.HasMeta("sw_win"))).ToList())
+        { map.RemoveChild(n); n.QueueFree(); }
+        // A small badge in the empty margin left of the map, between the back button and the drawing tools,
+        // instead of loose text over the relic bar.
+        var badge = Badges.Attach(map, $"Win chance {p.Value * 100:0}%", Badges.Gold, highlight: false, y: 0, fontSize: 22, width: 190,
+            detail: ctx.Ascension != 10 ? $"A10 model · you're on A{ctx.Ascension}" : "A10 model", detailColor: Badges.Muted);
+        badge.Name = WinLabelName;
+        badge.SetMeta("sw_win", true);
+        var vp = map.GetViewportRect().Size;
+        badge.Position = new Vector2(vp.X * 0.012f, vp.Y * 0.76f);
         Plugin.Log($"win chance {p.Value * 100:0.0}% (floor {ctx.Floor}, {ctx.Hp}/{ctx.MaxHp} HP, {ctx.Gold} gold, {ctx.Relics} relics, deck {ctx.DeckIds.Count})");
     }
 }
