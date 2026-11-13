@@ -136,10 +136,10 @@ public static class ExtraPatches
             bool dark = k.EndsWith(".DARK"), light = k.EndsWith(".LIGHT");
             if (!dark && !light) continue;
             double v = dark ? g : -g;   // each option vs the other one
-            var badge = Badges.Attach(b, (v >= 0 ? "better " : "") + Badges.Pct(v) + " win", v >= 0 ? Badges.Good : Badges.Bad,
-                highlight: v > 0, y: 0, fontSize: 20, width: 170);
+            var badge = Badges.Attach(b, Badges.Pct(v), v >= 0 ? Badges.Good : Badges.Bad,
+                highlight: v > 0, y: 0, fontSize: 20, width: 96);
             var target = b;
-            Callable.From(() => { if (GodotObject.IsInstanceValid(badge)) badge.Position = new Vector2(target.Size.X + 12, Math.Max(0, target.Size.Y / 2 - 18)); }).CallDeferred();
+            Callable.From(() => { if (GodotObject.IsInstanceValid(badge)) badge.Position = new Vector2(target.Size.X - badge.Size.X - 16, Math.Max(0, (target.Size.Y - badge.Size.Y) / 2)); }).CallDeferred();
         }
         Plugin.Log($"doors: {ctx.CharKey} floor {ctx.Floor}, deck {ctx.DeckIds.Count} ({basics} basics): remove vs upgrade {g * 100:+0.0;-0.0}%");
     }
@@ -159,10 +159,10 @@ public static class ExtraPatches
         foreach (var (b, v) in scores)
         {
             if (v == null) { b.GetNodeOrNull(Badges.NodeName)?.QueueFree(); continue; }
-            var badge = Badges.Attach(b, Badges.Pct(v.Value) + " win", v.Value >= 0 ? Badges.Good : Badges.Bad,
-                highlight: v.Value == best && best > 0, y: 0, fontSize: 20, width: 140);
+            var badge = Badges.Attach(b, Badges.Pct(v.Value), v.Value >= 0 ? Badges.Good : Badges.Bad,
+                highlight: v.Value == best && best > 0, y: 0, fontSize: 20, width: 96);
             var target = b;
-            Callable.From(() => { if (GodotObject.IsInstanceValid(badge)) badge.Position = new Vector2(target.Size.X + 12, Math.Max(0, target.Size.Y / 2 - 18)); }).CallDeferred();
+            Callable.From(() => { if (GodotObject.IsInstanceValid(badge)) badge.Position = new Vector2(target.Size.X - badge.Size.X - 16, Math.Max(0, (target.Size.Y - badge.Size.Y) / 2)); }).CallDeferred();
         }
     }
 
