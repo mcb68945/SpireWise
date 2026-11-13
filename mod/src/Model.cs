@@ -15,6 +15,9 @@ public sealed class CardModelData
     [JsonPropertyName("delta")] public Dictionary<string, double> Delta { get; set; } = new();
     [JsonPropertyName("gamma")] public Dictionary<string, double> Gamma { get; set; } = new();
     [JsonPropertyName("value")] public double Value { get; set; }
+    [JsonPropertyName("offers")] public int Offers { get; set; }
+    /// <summary>Extra pick value by act: [act 1 = 0, added from act 2, added again from act 3] (floor buckets 2+ and 4+).</summary>
+    [JsonPropertyName("beta_act")] public double[]? BetaAct { get; set; }
     // co-op only: team size [2p,3p,4p] and teammates' characters, and how they change the pick's value
     [JsonPropertyName("np")] public double[]? Np { get; set; }
     [JsonPropertyName("mate")] public Dictionary<string, double>? Mate { get; set; }
@@ -85,6 +88,24 @@ public static class ModelStore
 
     private static double Sig(double z) => 1 / (1 + Math.Exp(-z));
 
+    /// <summary>
+    /// What picking a typical card would do right now: the offer-weighted average gain over every modeled card,
+    /// for this deck, relics, floor and team. Card labels are shown relative to this. In A10 data, stronger players
+    /// skip more and win more, which pushes every card's raw number down by a similar amount; comparing with a typical
+    /// card cancels that shared shift and keeps what matters for the choice in front of you.
+    /// </summary>
+    public static double Typical(CharacterData data, ICollection<string> context, int deckSize, int floor, IReadOnlyList<string>? teammates = null)
+    {
+        double sum = 0, w = 0;
+        foreach (var (id, m) in data.Models)
+        {
+            if (m.Offers <= 0) continue;
+            sum += m.Offers * Evaluate(data, id, context, deckSize, floor, teammates).Gain;
+            w += m.Offers;
+        }
+        return w > 0 ? sum / w : 0;
+    }
+
     /// <summary>Change in win probability from picking <paramref name="card"/> given the deck (card ids), floor and deck size.</summary>
     public static Score Evaluate(CharacterData data, string card, ICollection<string> deckSet, int deckSize, int floor,
                                  IReadOnlyList<string>? teammates = null)
@@ -108,8 +129,10 @@ public static class ModelStore
                     if (m.Pmate != null && m.Pmate.TryGetValue(t, out var pv)) g += pv;
                 }
             }
-            double baseGain = Sig(z0 + m.Beta) - Sig(z0);
-            double gain = Sig(z0 + m.Beta + g) - Sig(z0);
+            double beta = m.Beta;
+            if (m.BetaAct is { Length: >= 3 }) beta += (b >= 2 ? m.BetaAct[1] : 0) + (b >= 4 ? m.BetaAct[2] : 0);
+            double baseGain = Sig(z0 + beta) - Sig(z0);
+            double gain = Sig(z0 + beta + g) - Sig(z0);
             return new Score(gain, gain - baseGain, false, true);
         }
         if (data.Simple.TryGetValue(card, out var s))

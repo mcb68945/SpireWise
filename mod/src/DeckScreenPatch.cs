@@ -46,6 +46,7 @@ public static class DeckScreenPatch
         private readonly Control _screen;
         private readonly bool _removal, _transform;
         private readonly Dictionary<string, double?> _scores = new();
+        private readonly HashSet<string> _blocked = new();
         private double _best = double.NaN;
         private SceneTree? _tree;
         private int _errors;
@@ -71,6 +72,8 @@ public static class DeckScreenPatch
                 var models = _removal ? data.Removal : data.Upgrade;
                 foreach (var id in ctx.DeckSet)
                     _scores[id] = DecisionStore.Evaluate(models.GetValueOrDefault(id), ctx.Context, ctx.DeckIds.Count, ctx.Floor, _removal);
+                // Upgrading a draw card mostly adds draw, which Fiddle blocks: don't score or recommend it.
+                if (!_removal) foreach (var id in ctx.DeckSet.Where(id => DrawBlock.Blocked(ctx, id)).ToList()) { _scores[id] = null; _blocked.Add(id); }
             }
             var known = _scores.Values.Where(v => v.HasValue).Select(v => v!.Value).ToList();
             _best = known.Count > 0 ? known.Max() : double.NaN;
@@ -94,6 +97,14 @@ public static class DeckScreenPatch
                 {
                     var id = holder.CardModel?.Id.ToString();
                     var existing = holder.GetNodeOrNull<Control>(Badges.NodeName);
+                    if (id != null && _blocked.Contains(id))
+                    {
+                        if (existing != null && existing.HasMeta("sw_id") && (string)existing.GetMeta("sw_id") == id) continue;
+                        var note = Badges.Attach(holder, "Fiddle blocks draw", Badges.Muted, highlight: false, y: 150, fontSize: 20, width: 190,
+                            scope: _screen, cardId: id);
+                        note.SetMeta("sw_id", id);
+                        continue;
+                    }
                     if (id == null || !_scores.TryGetValue(id, out var v) || v == null)
                     {
                         existing?.QueueFree();

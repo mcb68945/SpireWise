@@ -40,7 +40,9 @@ public static class ExtraPatches
         if (card == null || ctx == null) return;
         var s = CardScorer.Score(ctx, card.Id.ToString());
         if (!s.Known) { slot.GetNodeOrNull(Badges.NodeName)?.QueueFree(); return; }
-        var badge = Badges.Attach(slot, Badges.Pct(s.Gain) + " win" + (s.LowData ? " (low data)" : ""), Badges.Tone(s.Gain),
+        bool blocked = DrawBlock.Blocked(ctx, card.Id.ToString());
+        var badge = Badges.Attach(slot, Badges.Pct(s.Gain) + " vs avg" + (s.LowData ? " (low data)" : ""), blocked ? Badges.Muted : Badges.Tone(s.Gain),
+            detail: blocked ? DrawBlock.Note : null,
             highlight: false, y: 120, fontSize: 20, width: 170);
         // The fixed offset sat on the card text. Move it just below the price, like relics.
         Callable.From(() => PlaceBelowCost(slot, badge)).CallDeferred();

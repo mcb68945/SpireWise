@@ -83,15 +83,42 @@ public sealed class RunContext
 /// <summary>Card value for the current deck (solo or co-op), shared by the reward screen and the shop.</summary>
 public static class CardScorer
 {
+    /// <summary>Gain from picking <paramref name="id"/> minus the gain from a typical card (see ModelStore.Typical).</summary>
     public static Score Score(RunContext ctx, string id)
     {
         var solo = ModelStore.Get(ctx.DataVersion, ctx.CharKey);
         if (solo == null) return default;
         var coopData = ctx.Mates != null ? ModelStore.Get(ctx.DataVersion, ctx.CharKey + ".coop") : null;
         if (coopData != null && coopData.Models.ContainsKey(id))
-            return ModelStore.Evaluate(coopData, id, ctx.Context, ctx.DeckIds.Count, ctx.Floor, ctx.Mates);
+        {
+            var c = ModelStore.Evaluate(coopData, id, ctx.Context, ctx.DeckIds.Count, ctx.Floor, ctx.Mates);
+            return c with { Gain = c.Gain - Typical(ctx, coopData, ctx.Mates) };
+        }
         var s = ModelStore.Evaluate(solo, id, ctx.Context, ctx.DeckIds.Count, ctx.Floor);
+        if (s.Known && solo.Models.ContainsKey(id)) s = s with { Gain = s.Gain - Typical(ctx, solo, null) };
+        else if (s.Known) s = s with { Gain = s.Gain - SimpleTypical(solo) };
         return coopData != null && s.Known ? s with { LowData = true } : s;
+    }
+
+    private static readonly Dictionary<string, double> Cache = new();
+
+    private static double Typical(RunContext ctx, CharacterData data, IReadOnlyList<string>? mates)
+    {
+        string key = $"{data.GetHashCode()}|{ctx.Floor}|{ctx.DeckIds.Count}|{string.Join(",", ctx.Context.OrderBy(x => x))}|{(mates == null ? "" : string.Join(",", mates))}";
+        lock (Cache)
+        {
+            if (Cache.TryGetValue(key, out var v)) return v;
+            if (Cache.Count > 64) Cache.Clear();
+            return Cache[key] = ModelStore.Typical(data, ctx.Context, ctx.DeckIds.Count, ctx.Floor, mates);
+        }
+    }
+
+    /// <summary>Cards too rare to model only have an average value; compare those with the average modeled card's value.</summary>
+    private static double SimpleTypical(CharacterData data)
+    {
+        double sum = 0, w = 0;
+        foreach (var m in data.Models.Values) { sum += m.Offers * m.Value; w += m.Offers; }
+        return w > 0 ? sum / w : 0;
     }
 }
 
@@ -122,29 +149,24 @@ public static class RewardPatch
         bool coop = ctx.Mates != null;
         var coopData = coop ? ModelStore.Get(ctx.DataVersion, ctx.CharKey + ".coop") : null;
 
-        Score Eval(string id)
-        {
-            if (coopData != null && coopData.Models.ContainsKey(id))
-                return ModelStore.Evaluate(coopData, id, ctx.Context, ctx.DeckIds.Count, ctx.Floor, ctx.Mates);
-            var s = ModelStore.Evaluate(solo, id, ctx.Context, ctx.DeckIds.Count, ctx.Floor);
-            return coopData != null && s.Known ? s with { LowData = true } : s;
-        }
+        Score Eval(string id) => CardScorer.Score(ctx, id);
 
         var rowField = AccessTools.Field(typeof(NCardRewardSelectionScreen), "_cardRow");
         if (rowField?.GetValue(screen) is not Control row) { Plugin.Log("card row not found (game changed?)"); return; }
         var scored = row.GetChildren().OfType<NGridCardHolder>().Where(h => !h.IsQueuedForDeletion() && h.CardModel != null)
             .Select(h => (holder: h, id: h.CardModel!.Id.ToString(), score: Eval(h.CardModel!.Id.ToString()))).ToList();
-        var known = scored.Where(s => s.score.Known).ToList();
+        var known = scored.Where(s => s.score.Known && !DrawBlock.Blocked(ctx, s.id)).ToList();
         double best = known.Count > 0 ? known.Max(s => s.score.Gain) : double.NaN;
 
         foreach (var (holder, cardId, s) in scored)
         {
-            string text = !s.Known ? "no data" : Badges.Pct(s.Gain) + " win";
-            string? detail = !s.Known ? null : s.LowData ? "low data"
+            string text = !s.Known ? "no data" : Badges.Pct(s.Gain) + " vs avg card";
+            bool blocked = s.Known && DrawBlock.Blocked(ctx, cardId);
+            string? detail = !s.Known ? null : blocked ? DrawBlock.Note : s.LowData ? "low data"
                 : Math.Abs(s.Synergy) >= 0.003 ? Badges.Pct(s.Synergy) + (coop ? " from team+deck" : " from your deck") : null;
-            Badges.Attach(holder, text, !s.Known ? Badges.Muted : Badges.Tone(s.Gain),
-                detail: detail, detailColor: s.LowData ? Badges.Muted : Badges.Tone(s.Synergy),
-                highlight: s.Known && known.Count > 1 && s.Gain == best, y: 235, width: 230, scope: screen, cardId: cardId);
+            Badges.Attach(holder, text, !s.Known || blocked ? Badges.Muted : Badges.Tone(s.Gain),
+                detail: detail, detailColor: s.LowData || blocked ? Badges.Muted : Badges.Tone(s.Synergy),
+                highlight: s.Known && !blocked && known.Count > 1 && s.Gain == best, y: 235, width: 230, scope: screen, cardId: cardId);
         }
 
         var notes = new List<string> { $"SpireWise · A10 data · {ctx.DataVersion}" };
